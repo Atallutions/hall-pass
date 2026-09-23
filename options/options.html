@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hall Pass — Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <h1 class="brand"><img src="../icons/icon.svg" alt="" width="26" height="26" />Hall Pass</h1>
+      <p class="muted">Settings</p>
+    </div>
+    <span id="status-badge" class="pill pill-off">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="status-label">Loading…</span>
+    </span>
+  </header>
+
+  <section class="card how-it-works">
+    <div class="card-title">
+      <h2>How it works</h2>
+    </div>
+    <ol class="steps">
+      <li>
+        <strong>Add the sites that distract you.</strong>
+        Adding a site also blocks its subdomains, so <code>reddit.com</code> covers <code>www.reddit.com</code>.
+      </li>
+      <li>
+        <strong>The extension blocks them while an enabled schedule is active.</strong>
+        Opening one of them shows the block page instead of the site.
+      </li>
+      <li>
+        <strong>You can take a 5-minute pass.</strong>
+        Use the toolbar popup or the block page. Each site gets 6 passes a day, and the count resets at midnight.
+      </li>
+    </ol>
+    <p class="muted">
+      You can't end a pass early, and removing a site doesn't reset its count.
+      The limits are fixed on purpose.
+    </p>
+  </section>
+
+  <section class="card">
+    <div class="card-title">
+      <h2>Blocked sites</h2>
+      <span id="sites-count" class="count"></span>
+    </div>
+    <form id="add-site-form" class="add-row">
+      <input type="text" id="new-site-input" placeholder="example.com" autocomplete="off" />
+      <button id="add-site-btn" class="btn btn-primary" type="submit">Add site</button>
+    </form>
+    <ul id="sites-list" class="site-list"></ul>
+  </section>
+
+  <section class="card">
+    <div class="card-title">
+      <h2>Blocking schedule</h2>
+    </div>
+    <div id="schedules-list" class="schedules"></div>
+    <button id="add-schedule-btn" class="btn btn-dashed" type="button">+ Add schedule</button>
+  </section>
+
+  <template id="schedule-template">
+    <div class="schedule-card">
+      <div class="schedule-header">
+        <input type="text" class="schedule-label" placeholder="Untitled schedule" aria-label="Schedule name" />
+        <label class="switch" title="Enabled">
+          <input type="checkbox" class="schedule-enabled" checked />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-label">Enabled</span>
+        </label>
+        <button type="button" class="btn btn-icon remove-schedule-btn" aria-label="Remove schedule" title="Remove schedule">✕</button>
+      </div>
+      <div class="schedule-days"></div>
+      <div class="schedule-times">
+        <input type="time" class="schedule-start" value="09:00" aria-label="Start time" />
+        <span class="muted">to</span>
+        <input type="time" class="schedule-end" value="17:00" aria-label="End time" />
+        <span class="overnight-note muted" hidden>ends next day</span>
+      </div>
+    </div>
+  </template>
+
+  <script src="../common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

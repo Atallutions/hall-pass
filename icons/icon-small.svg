@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <mask id="m">
+      <g transform="rotate(-20 64 64)">
+        <rect x="12" y="25" width="104" height="78" rx="14" fill="#fff"/>
+        <circle cx="12" cy="64" r="13" fill="#000"/>
+        <circle cx="116" cy="64" r="13" fill="#000"/>
+        
+        <circle cx="80.64" cy="64" r="24" fill="none" stroke="#000" stroke-width="11"/>
+        <path d="M80.64 50.8v13.200000000000001l9.600000000000001 7.199999999999999" fill="none" stroke="#000" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </mask>
+  </defs>
+  <rect width="128" height="128" fill="#2d6cdf" mask="url(#m)"/>
+</svg>

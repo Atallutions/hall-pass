@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Site blocked</title>
+  <link rel="stylesheet" href="blocked.css" />
+</head>
+<body>
+  <main class="card">
+    <div id="icon" class="icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        <path id="shackle" d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    </div>
+
+    <p id="eyebrow" class="eyebrow">Focus time</p>
+    <h1><span id="site-name"></span> <span id="headline-suffix">is blocked</span></h1>
+    <p id="schedule-label" class="muted" hidden></p>
+
+    <div id="reopen" class="reopen" hidden>
+      <span class="reopen-label">Opens again at</span>
+      <span id="reopen-time" class="reopen-time"></span>
+      <span id="reopen-in" class="muted"></span>
+    </div>
+
+    <div class="actions">
+      <button id="close-btn" class="btn btn-primary" type="button">Close tab</button>
+      <button id="continue-btn" class="btn btn-primary" type="button" hidden>Continue</button>
+      <button id="unlock-btn" class="btn btn-secondary" type="button">Use a 5-minute pass</button>
+    </div>
+
+    <div id="allowance" class="allowance" hidden>
+      <span id="allowance-pips" class="pips" aria-hidden="true"></span>
+      <span id="allowance-text"></span>
+    </div>
+
+    <p class="brand-foot"><img src="../icons/icon.svg" alt="" width="14" height="14" />Hall Pass</p>
+  </main>
+
+  <script src="../common.js"></script>
+  <script src="blocked.js"></script>
+</body>
+</html>

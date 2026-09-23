@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hall Pass</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header class="header">
+    <h1 class="brand"><img src="../icons/icon.svg" alt="" width="22" height="22" />Hall Pass</h1>
+    <span id="status-badge" class="pill pill-off">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="status-label">Loading…</span>
+    </span>
+  </header>
+  <p id="status-detail" class="status-detail"></p>
+
+  <section id="access-warning" class="card card-warning" hidden>
+    <p class="warning-title">Sites aren't being blocked</p>
+    <p class="muted">The browser isn't letting Hall Pass act on websites.</p>
+    <button id="grant-access-btn" class="btn btn-primary" type="button">Allow access to websites</button>
+  </section>
+
+  <section id="current-site-section" class="card">
+    <div class="card-head">
+      <span class="eyebrow">This tab</span>
+      <span id="current-site-chip" class="chip" hidden></span>
+    </div>
+    <div class="site-row">
+      <p id="current-site-name" class="site-name" hidden></p>
+      <span id="unlock-timer" class="timer" hidden></span>
+    </div>
+    <p id="current-site-detail" class="muted"></p>
+
+    <button id="add-site-btn" class="btn btn-primary" type="button" hidden>Add this website to list</button>
+    <button id="unlock-btn" class="btn btn-primary" type="button" hidden>Use a 5-minute pass</button>
+
+    <div id="allowance" class="allowance" hidden>
+      <span id="allowance-pips" class="pips" aria-hidden="true"></span>
+      <span id="allowance-text"></span>
+    </div>
+  </section>
+
+  <footer>
+    <button id="open-options-btn" class="btn btn-ghost" type="button">Manage sites &amp; schedule</button>
+  </footer>
+
+  <script src="../common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

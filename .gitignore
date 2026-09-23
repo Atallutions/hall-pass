@@ -1,0 +1,10 @@
+# Build and signing output from web-ext
+web-ext-artifacts/
+*.xpi
+*.zip
+
+# AMO API keys, if kept in a local env file
+.env*
+
+node_modules/
+.DS_Store
