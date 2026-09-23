@@ -21,6 +21,10 @@ const {
   getNextRuleChange,
   getSiteCategoryId,
   getSitesInCategory,
+  normalizeSessionSettings,
+  getSessionPhase,
+  getCurrentSessionPhase,
+  getFocusEndDate,
 } = require("../common.js");
 
 function at(hhmm, dayOffsetFromThursday = 0) {
@@ -197,6 +201,29 @@ check("state saved before categories existed lists every site as uncategorized",
   { ...DEFAULT_STATE, blockedSites: ["bbc.com"] },
   null
 ), ["bbc.com"]);
+
+// Sessions: 30 min focus, 5 min break, started Thursday 10:00.
+const session = { startedAt: at("10:00").getTime(), focusMinutes: 30, breakMinutes: 5 };
+const sessionState = { ...DEFAULT_STATE, mode: "sessions", session, blockedSites: ["reddit.com"] };
+check("session starts in focus", getSessionPhase(session, at("10:00")), { phase: "focus", round: 1, endsAt: at("10:30").getTime() });
+check("break after the focus block", getSessionPhase(session, at("10:30")), { phase: "break", round: 1, endsAt: at("10:35").getTime() });
+check("next round after the break", getSessionPhase(session, at("10:35")), { phase: "focus", round: 2, endsAt: at("11:05").getTime() });
+check("rounds keep repeating", getSessionPhase(session, at("12:20")), { phase: "focus", round: 5, endsAt: at("12:50").getTime() });
+check("no session, no phase", getSessionPhase(null, at("10:00")), null);
+check("a session in the future has no phase", getSessionPhase(session, at("09:59")), null);
+check("sessions mode blocks during focus", isBlockingActive(sessionState, at("10:10")), true);
+check("sessions mode opens sites during a break", isBlockingActive(sessionState, at("10:31")), false);
+check("sessions mode ignores schedules", isBlockingActive({ ...sessionState, session: null }, at("10:10")), false);
+check("schedules mode ignores a stored session", getCurrentSessionPhase({ ...sessionState, mode: "schedules" }, at("10:10")), null);
+check("focus ends at the break", getFocusEndDate(sessionState, at("10:10")).getTime(), at("10:30").getTime());
+check("no focus end during a break", getFocusEndDate(sessionState, at("10:31")), null);
+check("schedules mode focus end", getFocusEndDate(DEFAULT_STATE, at("10:00")).getTime(), at("13:00").getTime());
+check("sessions mode: next rule change is the phase end", getNextRuleChange(sessionState, at("10:10")), at("10:30").getTime());
+check("sessions mode: no session, no alarm", getNextRuleChange({ ...sessionState, session: null }, at("10:10")), null);
+check("sessions mode: rules during focus", buildBlockRules(sessionState, at("10:10"), PAGE).length, 1);
+check("sessions mode: no rules during a break", buildBlockRules(sessionState, at("10:31"), PAGE).length, 0);
+check("session lengths outside the options fall back", normalizeSessionSettings({ focusMinutes: 1, breakMinutes: 60 }), { focusMinutes: 30, breakMinutes: 5 });
+check("allowed session lengths are kept", normalizeSessionSettings({ focusMinutes: 45, breakMinutes: 15 }), { focusMinutes: 45, breakMinutes: 15 });
 
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed.`);

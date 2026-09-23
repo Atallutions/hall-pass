@@ -1,4 +1,4 @@
-/* global browser, formatHM, getBlockUntilDate, getActiveSchedules, getUnlocksRemainingToday, MAX_UNLOCKS_PER_DAY */
+/* global browser, formatHM, getFocusEndDate, getActiveSchedules, getCurrentSessionPhase, getUnlocksRemainingToday, MAX_UNLOCKS_PER_DAY */
 "use strict";
 
 const params = new URLSearchParams(location.search);
@@ -64,12 +64,12 @@ function renderAllowance(remaining) {
   }
 }
 
-// The schedule can end while this page is open; offer the way through instead of a stale countdown.
-function renderEnded() {
+// Focus time can end while this page is open; offer the way through instead of a stale countdown.
+function renderEnded(onBreak) {
   reopenAt = null;
   icon.classList.add("ended");
   document.getElementById("shackle").setAttribute("d", "M8 11V7a4 4 0 0 1 7.75-1.4");
-  eyebrow.textContent = "Focus time is over";
+  eyebrow.textContent = onBreak ? "Break time" : "Focus time is over";
   headlineSuffix.textContent = "is available again";
   scheduleLabel.hidden = true;
   reopen.hidden = true;
@@ -82,17 +82,19 @@ function renderEnded() {
 async function render() {
   const status = await browser.runtime.sendMessage({ type: "getStatus" });
   const now = new Date(status.now);
+  const phase = getCurrentSessionPhase(status.state, now);
   if (!status.blockingActive) {
-    renderEnded();
+    renderEnded(Boolean(phase));
     return;
   }
 
-  const active = getActiveSchedules(status.state.schedules, now);
-  const labels = active.map((s) => s.label).filter(Boolean);
+  const labels = phase
+    ? [`Session ${phase.round}`]
+    : getActiveSchedules(status.state.schedules, now).map((s) => s.label).filter(Boolean);
   scheduleLabel.hidden = labels.length === 0;
   scheduleLabel.textContent = labels.join(" · ");
 
-  reopenAt = getBlockUntilDate(status.state.schedules, now);
+  reopenAt = getFocusEndDate(status.state, now);
   reopen.hidden = !reopenAt;
   if (reopenAt) {
     reopenTime.textContent = formatHM(reopenAt);

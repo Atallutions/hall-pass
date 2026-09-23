@@ -21,7 +21,7 @@
     <nav class="sidebar" aria-label="Settings">
       <a class="nav-item" href="#welcome" data-tab="welcome"><span class="nav-label">Welcome</span></a>
       <a class="nav-item" href="#schedules" data-tab="schedules">
-        <span class="nav-label">Schedules</span>
+        <span class="nav-label">Focus time</span>
         <span id="schedules-count" class="nav-count"></span>
       </a>
       <p class="nav-heading">
@@ -33,47 +33,87 @@
     </nav>
 
     <main>
-      <section id="panel-welcome" hidden>
-        <div class="card welcome">
-          <h2 class="welcome-title">Welcome to Hall Pass</h2>
-          <p class="lead">
-            Hall Pass blocks the sites you pick while one of your schedules is active.
-            If you need one of them, you can take a 5-minute pass.
-          </p>
-          <ol class="steps">
-            <li>
-              <strong>Add the sites that distract you.</strong>
-              Sort them into categories, or make your own. Every site follows the same schedules,
-              whatever its category. Adding a site also blocks its subdomains, so <code>reddit.com</code>
-              covers <code>www.reddit.com</code>.
-            </li>
-            <li>
-              <strong>The extension blocks them while an enabled schedule is active.</strong>
-              Opening one of them shows the block page instead of the site.
-            </li>
-            <li>
-              <strong>You can take a 5-minute pass.</strong>
-              Use the toolbar popup or the block page. Each site gets 6 passes a day, and the count resets at midnight.
-            </li>
-          </ol>
-          <p class="muted">
-            You can't end a pass early, and removing a site doesn't reset its count.
-            The limits are fixed on purpose.
-          </p>
+      <section id="panel-welcome" class="welcome" hidden>
+        <div class="card hero">
+          <div class="hero-text">
+            <p class="eyebrow">Welcome to Hall Pass</p>
+            <h2 class="hero-title">Block the sites that distract you, and step out when you have to.</h2>
+            <p class="lead">
+              Like a hall pass at school, it lets you leave during focus time, but not often and not for long.
+            </p>
+            <div class="hero-actions">
+              <a id="hero-cta" class="btn btn-primary btn-lg" href="#sites">Add your first site</a>
+              <a class="btn btn-secondary btn-lg" href="#schedules">Set focus time</a>
+            </div>
+          </div>
+          <div class="ticket" aria-hidden="true">
+            <div class="ticket-main">
+              <span class="ticket-label">Hall pass</span>
+              <span class="ticket-site">reddit.com</span>
+              <span class="ticket-time">4:59</span>
+            </div>
+            <div class="ticket-stub">
+              <span class="ticket-pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span>
+              <span>4 of 6 left today</span>
+            </div>
+          </div>
         </div>
 
-        <div class="summary">
-          <a id="summary-sites-link" class="card summary-card" href="#sites">
-            <span id="summary-sites" class="summary-value"></span>
-            <span id="summary-sites-label" class="muted"></span>
-            <span class="summary-action">Manage blocked sites</span>
-          </a>
-          <a class="card summary-card" href="#schedules">
-            <span id="summary-schedules" class="summary-value"></span>
-            <span id="summary-schedules-label" class="muted"></span>
-            <span class="summary-action">Edit schedules</span>
-          </a>
+        <div class="card">
+          <h3 class="section-title">How it works</h3>
+          <ol class="journey">
+            <li>
+              <span class="journey-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+              </span>
+              <strong>Pick the sites</strong>
+              <p>Add the sites that distract you and sort them into categories.</p>
+            </li>
+            <li>
+              <span class="journey-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              </span>
+              <strong>Focus</strong>
+              <p>During focus time, those sites show a block page instead.</p>
+            </li>
+            <li>
+              <span class="journey-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z" /><path d="M9 6v12" stroke-dasharray="2 2" /></svg>
+              </span>
+              <strong>Take a pass</strong>
+              <p>The site opens for 5 minutes, then Hall Pass blocks it again.</p>
+            </li>
+          </ol>
         </div>
+
+        <div class="card rules">
+          <h3 class="section-title">The rules</h3>
+          <div class="rule-tiles">
+            <div class="rule-tile"><span class="rule-value">6</span><span class="muted">passes per site, per day</span></div>
+            <div class="rule-tile"><span class="rule-value">5 min</span><span class="muted">per pass</span></div>
+            <div class="rule-tile"><span class="rule-value">00:00</span><span class="muted">when the counts reset</span></div>
+          </div>
+          <p class="section-text">There's no setting to change them, so you can't raise them while you're distracted.</p>
+        </div>
+
+        <div class="card">
+          <h3 class="section-title">The modes</h3>
+          <div class="mode-tiles">
+            <a class="mode-tile" data-mode="schedules" href="#schedules">
+              <span class="mode-tile-head"><strong>Schedules</strong><span class="in-use">In use</span></span>
+              <span class="muted">Blocks your sites at set times every week. You don't have to start anything.</span>
+            </a>
+            <a class="mode-tile" data-mode="sessions" href="#schedules">
+              <span class="mode-tile-head"><strong>Sessions and breaks</strong><span class="in-use">In use</span></span>
+              <span class="muted">Blocks your sites for a session you start, then opens them for a break. Good for the Pomodoro technique.</span>
+            </a>
+          </div>
+        </div>
+
+        <p class="footnote">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+          <span>Your list and settings stay in this browser. Hall Pass doesn't send any data.</span>
+        </p>
       </section>
 
       <section id="panel-sites" class="card" hidden>
@@ -93,15 +133,71 @@
         <ul id="sites-list" class="site-list"></ul>
       </section>
 
-      <section id="panel-schedules" class="card" hidden>
-        <div class="card-title">
-          <h2>Blocking schedule</h2>
+      <section id="panel-schedules" class="stack" hidden>
+        <div class="card">
+          <h2>Focus time</h2>
+          <p class="muted">Hall Pass blocks your sites during focus time. Choose how focus time starts.</p>
+          <div class="mode-picker" role="radiogroup" aria-label="How focus time starts">
+            <label class="mode-option">
+              <input type="radio" name="mode" value="schedules" />
+              <span class="mode-body">
+                <strong>Schedules</strong>
+                <span>Blocks your sites at set times every week. You don't have to start anything.</span>
+              </span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="mode" value="sessions" />
+              <span class="mode-body">
+                <strong>Sessions and breaks</strong>
+                <span>Blocks your sites for a session you start, then opens them for a break. Good for the Pomodoro technique.</span>
+              </span>
+            </label>
+          </div>
         </div>
-        <div id="schedules-list" class="schedules"></div>
-        <button id="add-schedule-btn" class="btn btn-dashed" type="button">+ Add schedule</button>
+
+        <div id="schedules-card" class="card">
+          <div class="card-title">
+            <h2>Schedules</h2>
+          </div>
+          <p class="muted">
+            Hall Pass blocks your sites while any enabled schedule is running. A schedule can run past midnight,
+            for example 22:00 to 06:00.
+          </p>
+          <p id="schedules-empty" class="empty-note" hidden></p>
+          <div id="schedules-list" class="schedules"></div>
+          <button id="add-schedule-btn" class="btn btn-dashed" type="button">+ Add schedule</button>
+        </div>
+
+        <div id="sessions-card" class="card">
+          <div class="card-title">
+            <h2>Sessions and breaks</h2>
+          </div>
+          <div class="length-row">
+            <span class="length-label" id="focus-length-label">Session</span>
+            <div id="focus-options" class="length-options" role="radiogroup" aria-labelledby="focus-length-label"></div>
+          </div>
+          <div class="length-row">
+            <span class="length-label" id="break-length-label">Break</span>
+            <div id="break-options" class="length-options" role="radiogroup" aria-labelledby="break-length-label"></div>
+          </div>
+          <p class="muted">
+            After each break, the next session starts on its own. This repeats until you end the session
+            or close the browser. A running session keeps its lengths, and new ones apply to the next session you start.
+          </p>
+          <div class="session-control">
+            <span id="session-state" class="session-state"></span>
+            <button id="start-session-btn" class="btn btn-primary" type="button">Start a session</button>
+            <button id="end-session-btn" class="btn btn-secondary" type="button">End session</button>
+          </div>
+        </div>
       </section>
     </main>
   </div>
+
+  <footer class="page-footer">
+    Made with <span class="heart" role="img" aria-label="love">&hearts;</span> by
+    <a href="https://www.atallutions.com" target="_blank" rel="noopener noreferrer">Atallutions Technologies</a>
+  </footer>
 
   <template id="schedule-template">
     <div class="schedule-card">

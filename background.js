@@ -1,4 +1,4 @@
-/* global browser, importScripts, DEFAULT_STATE, isBlockingActive, isSiteUnlocked, getUnlockExpiry, pruneExpiredUnlocks, clampUnlockMinutes, normalizeHost, getUnlocksRemainingToday, recordUnlock, buildBlockRules, getNextRuleChange */
+/* global browser, importScripts, DEFAULT_STATE, formatHM, normalizeSessionSettings, getCurrentSessionPhase, isBlockingActive, isSiteUnlocked, getUnlockExpiry, pruneExpiredUnlocks, clampUnlockMinutes, normalizeHost, getUnlocksRemainingToday, recordUnlock, buildBlockRules, getNextRuleChange */
 "use strict";
 
 // Chrome runs this file alone as a service worker; Firefox loads common.js first via "scripts".
@@ -79,6 +79,31 @@ async function applyRules() {
     await browser.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
   }
   updateBadge(state, now);
+  await announceSessionPhase(state, now);
+}
+
+// Sessions: one notification when a break starts and one when the next round starts. The last
+// phase announced is kept in storage.session, which survives this script being stopped but not
+// a browser restart (and a restart ends the session anyway).
+async function announceSessionPhase(state, now) {
+  const phase = getCurrentSessionPhase(state, now);
+  const key = phase ? `${state.session.startedAt}:${phase.round}:${phase.phase}` : "";
+  const { seenPhase = "" } = await browser.storage.session.get("seenPhase");
+  if (key === seenPhase) return;
+  await browser.storage.session.set({ seenPhase: key });
+  // You just started the first phase yourself; only changes after that are news.
+  if (!phase || !seenPhase.startsWith(`${state.session.startedAt}:`)) return;
+
+  const until = formatHM(new Date(phase.endsAt));
+  const notice =
+    phase.phase === "break"
+      ? { title: "Break time", message: `Your sites are open until ${until}. The next session starts then.` }
+      : { title: `Session ${phase.round} started`, message: `Your sites are blocked until ${until}.` };
+  browser.notifications.create("session-phase", {
+    type: "basic",
+    iconUrl: browser.runtime.getURL("icons/icon-128.png"),
+    ...notice,
+  });
 }
 
 // Without host access the redirect rules do nothing. Firefox and Chrome both let users revoke it.
@@ -90,6 +115,21 @@ const messageHandlers = {
   async requestUnlock(msg) {
     if (!msg.site) throw new Error("requestUnlock requires a site");
     return serialized(() => setSiteUnlock(msg.site, msg.minutes));
+  },
+  // The lengths come from the settings, limited to the allowed options, never from the message.
+  async startSession() {
+    const state = await getState();
+    if (state.mode !== "sessions") throw new Error("Sessions and breaks mode is off");
+    if (state.session) return { session: state.session };
+    const session = { startedAt: Date.now(), ...normalizeSessionSettings(state.sessionSettings) };
+    await browser.storage.local.set({ session });
+    await syncRules();
+    return { session };
+  },
+  async endSession() {
+    await browser.storage.local.set({ session: null });
+    await syncRules();
+    return {};
   },
   async getStatus() {
     // Also repairs stale rules, e.g. when the block page opens just after a schedule ended.
@@ -111,19 +151,34 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
+// "ON" during a schedule. During a session, the minutes left in the phase, red for focus and green
+// for a break; the heartbeat keeps it within a minute.
 function updateBadge(state, now) {
-  const text = isBlockingActive(state, now) ? "ON" : "";
+  const phase = getCurrentSessionPhase(state, now);
+  let text = isBlockingActive(state, now) ? "ON" : "";
+  // Dark enough for white text; left alone, Chrome draws black text on a light red.
+  let color = "#b3261e";
+  if (phase) {
+    text = `${Math.ceil((phase.endsAt - now.getTime()) / 60000)}m`;
+    if (phase.phase === "break") color = "#1e7e34";
+  }
   browser.action.setBadgeText({ text });
-  if (text) browser.action.setBadgeBackgroundColor({ color: "#d9534f" });
+  if (!text) return;
+  browser.action.setBadgeBackgroundColor({ color });
+  if (browser.action.setBadgeTextColor) browser.action.setBadgeTextColor({ color: "#ffffff" });
 }
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area === "local") syncRules();
 });
 browser.alarms.onAlarm.addListener(() => syncRules());
-// Registered so Chrome starts the service worker with the browser; the call below does the work.
-browser.runtime.onStartup.addListener(() => syncRules());
-// The settings page opens on its welcome tab while there are no blocked sites.
+// Closing the browser ends a session, so one from yesterday isn't still running today. Registered
+// at the top level, which also makes Chrome start the service worker with the browser.
+browser.runtime.onStartup.addListener(async () => {
+  await browser.storage.local.set({ session: null });
+  syncRules();
+});
+// Open the settings page, on its welcome tab, after a first install.
 browser.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === "install") browser.runtime.openOptionsPage();
 });

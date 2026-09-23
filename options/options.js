@@ -1,4 +1,4 @@
-/* global browser, DEFAULT_STATE, DAY_LABELS, normalizeSiteInput, getUnlocksUsedToday, MAX_UNLOCKS_PER_DAY, isBlockingActive, getBlockUntilDate, formatHM, parseHM, getSiteCategoryId, getSitesInCategory */
+/* global browser, DEFAULT_STATE, DAY_LABELS, normalizeSiteInput, getUnlocksUsedToday, MAX_UNLOCKS_PER_DAY, isBlockingActive, getFocusEndDate, getCurrentSessionPhase, normalizeSessionSettings, SESSION_FOCUS_OPTIONS, SESSION_BREAK_OPTIONS, formatHM, parseHM, getSiteCategoryId, getSitesInCategory */
 "use strict";
 
 const statusBadge = document.getElementById("status-badge");
@@ -12,11 +12,7 @@ const panels = {
   sites: document.getElementById("panel-sites"),
   schedules: document.getElementById("panel-schedules"),
 };
-const summarySites = document.getElementById("summary-sites");
-const summarySitesLabel = document.getElementById("summary-sites-label");
-const summarySitesLink = document.getElementById("summary-sites-link");
-const summarySchedules = document.getElementById("summary-schedules");
-const summarySchedulesLabel = document.getElementById("summary-schedules-label");
+const heroCta = document.getElementById("hero-cta");
 const uncategorizedTitle = document.getElementById("uncategorized-title");
 const uncategorizedNote = document.getElementById("uncategorized-note");
 const categoryNameInput = document.getElementById("category-name");
@@ -28,6 +24,15 @@ const sitesList = document.getElementById("sites-list");
 const schedulesList = document.getElementById("schedules-list");
 const addScheduleBtn = document.getElementById("add-schedule-btn");
 const scheduleTemplate = document.getElementById("schedule-template");
+const modeInputs = document.querySelectorAll('input[name="mode"]');
+const schedulesCard = document.getElementById("schedules-card");
+const schedulesEmpty = document.getElementById("schedules-empty");
+const sessionsCard = document.getElementById("sessions-card");
+const focusOptions = document.getElementById("focus-options");
+const breakOptions = document.getElementById("break-options");
+const sessionStateLabel = document.getElementById("session-state");
+const startSessionBtn = document.getElementById("start-session-btn");
+const endSessionBtn = document.getElementById("end-session-btn");
 
 // Hash id of the "Uncategorized" tab. Category ids are UUIDs or the short default ids.
 const UNCATEGORIZED = "uncategorized";
@@ -47,7 +52,9 @@ function plural(n, word) {
 
 async function load() {
   state = await browser.storage.local.get(DEFAULT_STATE);
+  state.sessionSettings = normalizeSessionSettings(state.sessionSettings);
   renderSchedules();
+  renderMode();
   renderStatus();
   applyRoute();
 }
@@ -63,6 +70,12 @@ browser.storage.onChanged.addListener((changes, area) => {
     renderWelcome();
   }
   if (changes.unlockUsage || changes.blockedSites) renderSites();
+  // Sessions start and end from the popup too.
+  if (changes.session) {
+    state.session = changes.session.newValue || null;
+    renderSessionControl();
+    renderStatus();
+  }
 });
 
 // Counts roll over at midnight without a storage change; refresh when the tab comes back.
@@ -72,7 +85,10 @@ document.addEventListener("visibilitychange", () => {
     renderStatus();
   }
 });
-setInterval(renderStatus, 30 * 1000);
+setInterval(() => {
+  renderStatus();
+  renderSessionControl();
+}, 15 * 1000);
 
 async function save() {
   renderStatus();
@@ -81,15 +97,21 @@ async function save() {
     schedules: state.schedules,
     categories: state.categories,
     siteCategories: state.siteCategories,
+    mode: state.mode,
+    sessionSettings: state.sessionSettings,
   });
 }
 
 function renderStatus() {
   const now = new Date();
+  const phase = getCurrentSessionPhase(state, now);
   if (isBlockingActive(state, now)) {
-    const until = getBlockUntilDate(state.schedules, now);
+    const until = getFocusEndDate(state, now);
     statusBadge.className = "pill pill-on";
     statusLabel.textContent = until ? `Blocking until ${formatHM(until)}` : "Blocking";
+  } else if (phase) {
+    statusBadge.className = "pill pill-off";
+    statusLabel.textContent = `Break until ${formatHM(new Date(phase.endsAt))}`;
   } else {
     statusBadge.className = "pill pill-off";
     statusLabel.textContent = "Not blocking";
@@ -119,8 +141,9 @@ function parseRoute() {
     const id = hash.slice("sites/".length);
     if (state.categories.some((c) => c.id === id)) return sitesRoute(id);
   }
-  // No tab, or one for a removed category. The welcome page is for people who haven't started yet.
-  return state.blockedSites.length ? firstSitesRoute() : { tab: "welcome" };
+  // No tab (the popup's Settings button, the browser's extension preferences), or one for a
+  // removed category.
+  return { tab: "welcome" };
 }
 
 function applyRoute() {
@@ -176,7 +199,7 @@ function renderNav() {
     else link.removeAttribute("aria-current");
   }
   const enabled = state.schedules.filter((s) => s.enabled !== false).length;
-  schedulesCount.textContent = enabled ? String(enabled) : "";
+  schedulesCount.textContent = state.mode === "sessions" ? "" : enabled ? String(enabled) : "";
   sitesTotal.textContent = state.blockedSites.length ? String(state.blockedSites.length) : "";
 
   categoryNav.innerHTML = "";
@@ -198,17 +221,11 @@ function renderNav() {
 
 function renderWelcome() {
   const sites = state.blockedSites.length;
-  const categories = state.categories.filter((c) => getSitesInCategory(state, c.id).length).length;
-  summarySites.textContent = String(sites);
-  summarySitesLabel.textContent =
-    categories > 0
-      ? `${plural(sites, "site")} on your list, in ${categories} ${categories === 1 ? "category" : "categories"}`
-      : `${plural(sites, "site")} on your list`;
-  summarySitesLink.href = routeHash(firstSitesRoute());
-
-  const enabled = state.schedules.filter((s) => s.enabled !== false).length;
-  summarySchedules.textContent = String(enabled);
-  summarySchedulesLabel.textContent = `${plural(enabled, "schedule")} enabled`;
+  heroCta.textContent = sites ? "Manage blocked sites" : "Add your first site";
+  heroCta.href = routeHash(firstSitesRoute());
+  for (const tile of document.querySelectorAll(".mode-tile")) {
+    tile.classList.toggle("current", tile.dataset.mode === state.mode);
+  }
 }
 
 // Categories
@@ -401,6 +418,89 @@ newSiteInput.addEventListener("input", () => {
   addSiteNote.hidden = true;
 });
 
+// Focus time mode and sessions
+
+function renderMode() {
+  for (const input of modeInputs) input.checked = input.value === state.mode;
+  schedulesCard.hidden = state.mode === "sessions";
+  sessionsCard.hidden = state.mode !== "sessions";
+  renderLengthOptions(focusOptions, "focus-length", SESSION_FOCUS_OPTIONS, "focusMinutes");
+  renderLengthOptions(breakOptions, "break-length", SESSION_BREAK_OPTIONS, "breakMinutes");
+  renderSessionControl();
+}
+
+function renderLengthOptions(container, name, minutes, key) {
+  container.innerHTML = "";
+  for (const value of minutes) {
+    const label = document.createElement("label");
+    label.className = "day-chip";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = name;
+    radio.checked = state.sessionSettings[key] === value;
+    radio.addEventListener("change", async () => {
+      state.sessionSettings = { ...state.sessionSettings, [key]: value };
+      renderSessionControl();
+      await save();
+    });
+    const text = document.createElement("span");
+    text.textContent = `${value} min`;
+    label.append(radio, text);
+    container.appendChild(label);
+  }
+}
+
+function renderSessionControl() {
+  const phase = getCurrentSessionPhase(state, new Date());
+  startSessionBtn.hidden = Boolean(phase);
+  endSessionBtn.hidden = !phase;
+  startSessionBtn.textContent = `Start a ${state.sessionSettings.focusMinutes}-minute session`;
+  if (!phase) {
+    sessionStateLabel.className = "session-state";
+    sessionStateLabel.textContent = "No session running";
+    return;
+  }
+  const until = formatHM(new Date(phase.endsAt));
+  sessionStateLabel.className = `session-state ${phase.phase}`;
+  sessionStateLabel.textContent =
+    phase.phase === "focus"
+      ? `Session ${phase.round} until ${until}, then a ${state.session.breakMinutes}-minute break`
+      : `Break until ${until}, then session ${phase.round + 1}`;
+}
+
+for (const input of modeInputs) {
+  input.addEventListener("change", async () => {
+    if (!input.checked) return;
+    state.mode = input.value;
+    renderMode();
+    renderNav();
+    renderWelcome();
+    renderStatus();
+    await save();
+    // A running session only counts in sessions mode; don't leave one waiting for a switch back.
+    if (state.mode !== "sessions" && state.session) await browser.runtime.sendMessage({ type: "endSession" });
+  });
+}
+
+startSessionBtn.addEventListener("click", async () => {
+  startSessionBtn.disabled = true;
+  try {
+    const result = await browser.runtime.sendMessage({ type: "startSession" });
+    if (result && result.session) state.session = result.session;
+    renderSessionControl();
+    renderStatus();
+  } finally {
+    startSessionBtn.disabled = false;
+  }
+});
+
+endSessionBtn.addEventListener("click", async () => {
+  await browser.runtime.sendMessage({ type: "endSession" });
+  state.session = null;
+  renderSessionControl();
+  renderStatus();
+});
+
 // Schedules
 
 function renderSchedules() {
@@ -408,6 +508,16 @@ function renderSchedules() {
   for (const schedule of state.schedules) {
     schedulesList.appendChild(buildScheduleCard(schedule));
   }
+  renderSchedulesEmpty();
+}
+
+// With no enabled schedule nothing is ever blocked; say so instead of leaving an empty list.
+function renderSchedulesEmpty() {
+  const enabled = state.schedules.filter((s) => s.enabled !== false).length;
+  schedulesEmpty.hidden = enabled > 0;
+  schedulesEmpty.textContent = state.schedules.length
+    ? "All schedules are disabled, so Hall Pass isn't blocking anything."
+    : "No schedules yet, so Hall Pass isn't blocking anything. Add one to set your focus time.";
 }
 
 function buildScheduleCard(schedule) {
@@ -432,6 +542,7 @@ function buildScheduleCard(schedule) {
   enabledInput.addEventListener("change", async () => {
     schedule.enabled = enabledInput.checked;
     syncEnabled();
+    renderSchedulesEmpty();
     renderNav();
     renderWelcome();
     await save();

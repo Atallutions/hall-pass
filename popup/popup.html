@@ -21,6 +21,20 @@
     <button id="grant-access-btn" class="btn btn-primary" type="button">Allow access to websites</button>
   </section>
 
+  <section id="session-card" class="card session-card" hidden>
+    <div class="card-head">
+      <span id="session-eyebrow" class="eyebrow">Sessions and breaks</span>
+      <span id="session-round" class="muted"></span>
+    </div>
+    <div id="session-clock" class="session-clock" hidden>
+      <span id="session-phase" class="session-phase"></span>
+      <span id="session-timer" class="session-timer"></span>
+    </div>
+    <p id="session-detail" class="muted"></p>
+    <button id="start-session-btn" class="btn btn-primary" type="button" hidden>Start a session</button>
+    <button id="end-session-btn" class="btn btn-ghost" type="button" hidden>End session</button>
+  </section>
+
   <section id="current-site-section" class="card">
     <div class="card-head">
       <span class="eyebrow">This tab</span>
@@ -42,7 +56,7 @@
   </section>
 
   <footer>
-    <button id="open-options-btn" class="btn btn-ghost" type="button">Manage sites &amp; schedule</button>
+    <button id="open-options-btn" class="btn btn-ghost" type="button">Settings</button>
   </footer>
 
   <script src="../common.js"></script>

@@ -1,4 +1,4 @@
-/* global browser, normalizeSiteInput, formatHM, getBlockUntilDate, findBlockedSiteMatch, isSiteUnlocked, getUnlockExpiry, MAX_UNLOCKS_PER_DAY, getUnlocksRemainingToday */
+/* global browser, normalizeSiteInput, formatHM, getFocusEndDate, getCurrentSessionPhase, normalizeSessionSettings, findBlockedSiteMatch, isSiteUnlocked, getUnlockExpiry, MAX_UNLOCKS_PER_DAY, getUnlocksRemainingToday */
 "use strict";
 
 const statusBadge = document.getElementById("status-badge");
@@ -16,12 +16,21 @@ const openOptionsBtn = document.getElementById("open-options-btn");
 const addSiteBtn = document.getElementById("add-site-btn");
 const accessWarning = document.getElementById("access-warning");
 const grantAccessBtn = document.getElementById("grant-access-btn");
+const sessionCard = document.getElementById("session-card");
+const sessionRound = document.getElementById("session-round");
+const sessionClock = document.getElementById("session-clock");
+const sessionPhase = document.getElementById("session-phase");
+const sessionTimer = document.getElementById("session-timer");
+const sessionDetail = document.getElementById("session-detail");
+const startSessionBtn = document.getElementById("start-session-btn");
+const endSessionBtn = document.getElementById("end-session-btn");
 const BLOCKED_PAGE_URL = browser.runtime.getURL("blocked/blocked.html");
 
 let currentMatchedSite = null;
 let currentHostname = null;
 let currentState = null;
 let currentSiteWasUnlocked = false;
+let currentPhaseEnd = 0;
 
 function currentTabHostname() {
   return browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
@@ -46,10 +55,25 @@ function updateUnlockTimer(now) {
   unlockTimer.textContent = `${mm}:${ss.toString().padStart(2, "0")}`;
 }
 
-// Ticks this tab's unlock timer; when it runs out, re-render so the unlock button comes back.
+function formatCountdown(ms) {
+  const totalSeconds = Math.max(Math.ceil(ms / 1000), 0);
+  const mm = Math.floor(totalSeconds / 60);
+  const ss = totalSeconds % 60;
+  return `${mm}:${ss.toString().padStart(2, "0")}`;
+}
+
+// Ticks the session clock and this tab's unlock timer; when either runs out, re-render.
 setInterval(() => {
-  if (!currentSiteWasUnlocked) return;
   const now = new Date();
+  if (currentPhaseEnd) {
+    if (now.getTime() >= currentPhaseEnd) {
+      currentPhaseEnd = 0;
+      refresh();
+      return;
+    }
+    sessionTimer.textContent = formatCountdown(currentPhaseEnd - now.getTime());
+  }
+  if (!currentSiteWasUnlocked) return;
   if (isSiteUnlocked(currentState, currentMatchedSite, now)) {
     updateUnlockTimer(now);
   } else {
@@ -57,6 +81,35 @@ setInterval(() => {
     refresh();
   }
 }, 1000);
+
+function renderSession(state, now) {
+  const sessionsMode = state.mode === "sessions";
+  sessionCard.hidden = !sessionsMode;
+  currentPhaseEnd = 0;
+  if (!sessionsMode) return;
+
+  const phase = getCurrentSessionPhase(state, now);
+  const settings = phase ? state.session : normalizeSessionSettings(state.sessionSettings);
+  const rhythm = `${settings.focusMinutes} min sessions, ${settings.breakMinutes} min breaks`;
+  sessionClock.hidden = !phase;
+  startSessionBtn.hidden = Boolean(phase);
+  endSessionBtn.hidden = !phase;
+  if (!phase) {
+    sessionRound.textContent = "";
+    sessionDetail.textContent = `${rhythm}. They repeat until you end them.`;
+    startSessionBtn.textContent = `Start a ${settings.focusMinutes}-minute session`;
+    return;
+  }
+  currentPhaseEnd = phase.endsAt;
+  sessionRound.textContent = `Session ${phase.round}`;
+  sessionClock.className = `session-clock ${phase.phase}`;
+  sessionPhase.textContent = phase.phase === "focus" ? "Focus" : "Break";
+  sessionTimer.textContent = formatCountdown(phase.endsAt - now.getTime());
+  sessionDetail.textContent =
+    phase.phase === "focus"
+      ? `Break at ${formatHM(new Date(phase.endsAt))}. ${rhythm}.`
+      : `Sites are open. Session ${phase.round + 1} starts at ${formatHM(new Date(phase.endsAt))}.`;
+}
 
 function setChip(text, variant) {
   currentSiteChip.hidden = !text;
@@ -89,15 +142,25 @@ async function render(status, hostname) {
   currentSiteWasUnlocked = false;
   accessWarning.hidden = status.hostAccess !== false;
 
+  renderSession(state, now);
+  const sessionsMode = state.mode === "sessions";
+  const phase = getCurrentSessionPhase(state, now);
   if (blockingActive) {
     statusBadge.className = "pill pill-on";
-    statusLabel.textContent = "Blocking";
-    const until = getBlockUntilDate(state.schedules, now);
-    statusDetail.textContent = until ? `Sites stay blocked until ${formatHM(until)}.` : "";
-  } else {
+    statusLabel.textContent = sessionsMode ? "Focus" : "Blocking";
+    const until = getFocusEndDate(state, now);
+    // The session card already says when the break starts.
+    statusDetail.textContent = until && !sessionsMode ? `Sites stay blocked until ${formatHM(until)}.` : "";
+  } else if (phase) {
     statusBadge.className = "pill pill-off";
+    statusLabel.textContent = "Break";
+    statusDetail.textContent = "";
+  } else {
+    statusBadge.className = sessionsMode ? "pill pill-idle" : "pill pill-off";
     statusLabel.textContent = "Off";
-    statusDetail.textContent = "No schedule is active. Sites load normally.";
+    statusDetail.textContent = sessionsMode
+      ? "No session running. Sites load normally."
+      : "No schedule is active. Sites load normally.";
   }
 
   addSiteBtn.hidden = true;
@@ -121,8 +184,16 @@ async function render(status, hostname) {
   }
 
   if (!blockingActive) {
-    setChip("Off schedule", "neutral");
-    currentSiteDetail.textContent = "On your list, but no schedule is active right now.";
+    if (phase) {
+      setChip("Break", "neutral");
+      currentSiteDetail.textContent = "On your list. It opens during breaks.";
+    } else if (sessionsMode) {
+      setChip("No session", "neutral");
+      currentSiteDetail.textContent = "On your list. It's blocked while a session runs.";
+    } else {
+      setChip("Off schedule", "neutral");
+      currentSiteDetail.textContent = "On your list, but no schedule is active right now.";
+    }
     return;
   }
 
@@ -140,10 +211,12 @@ async function render(status, hostname) {
 
   setChip("Blocked", "blocked");
   if (remaining > 0) {
-    currentSiteDetail.textContent = "Blocked by your schedule.";
+    currentSiteDetail.textContent = sessionsMode ? "Blocked during this session." : "Blocked by your schedule.";
     unlockBtn.hidden = false;
   } else {
-    currentSiteDetail.textContent = "Blocked until the schedule ends. Passes reset at midnight.";
+    currentSiteDetail.textContent = sessionsMode
+      ? "Blocked until the break. Passes reset at midnight."
+      : "Blocked until the schedule ends. Passes reset at midnight.";
   }
 }
 
@@ -183,6 +256,26 @@ addSiteBtn.addEventListener("click", async () => {
     await refresh();
   } finally {
     addSiteBtn.disabled = false;
+  }
+});
+
+startSessionBtn.addEventListener("click", async () => {
+  startSessionBtn.disabled = true;
+  try {
+    await browser.runtime.sendMessage({ type: "startSession" });
+    await refresh();
+  } finally {
+    startSessionBtn.disabled = false;
+  }
+});
+
+endSessionBtn.addEventListener("click", async () => {
+  endSessionBtn.disabled = true;
+  try {
+    await browser.runtime.sendMessage({ type: "endSession" });
+    await refresh();
+  } finally {
+    endSessionBtn.disabled = false;
   }
 });
 

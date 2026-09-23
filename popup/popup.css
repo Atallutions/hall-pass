@@ -104,6 +104,11 @@ h1 {
   color: var(--green);
 }
 
+.pill-idle {
+  background: var(--neutral-soft);
+  color: var(--muted);
+}
+
 .status-detail {
   margin-top: 4px;
   font-size: 12px;
@@ -229,6 +234,39 @@ h1 {
 
 .pip.left {
   background: var(--accent);
+}
+
+/* Session */
+
+.session-clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-phase {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.session-clock.focus .session-phase {
+  color: var(--red);
+}
+
+.session-clock.break .session-phase {
+  color: var(--green);
+}
+
+.session-timer {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.session-card .muted {
+  margin-top: 2px;
 }
 
 /* Buttons */

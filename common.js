@@ -9,13 +9,23 @@ if (typeof globalThis.browser === "undefined" && typeof globalThis.chrome !== "u
 const MAX_UNLOCK_MINUTES = 5;
 const MAX_UNLOCKS_PER_DAY = 6;
 
+// Lengths a session and its break can have, in minutes. The background script only starts sessions
+// with these, whatever is in storage.
+const SESSION_FOCUS_OPTIONS = [20, 30, 45];
+const SESSION_BREAK_OPTIONS = [5, 10, 15];
+
 const DEFAULT_STATE = {
+  // "schedules": blocking follows the clock. "sessions": it follows a session you start, which
+  // alternates focus and breaks until you end it.
+  mode: "schedules",
+  sessionSettings: { focusMinutes: 30, breakMinutes: 5 },
+  session: null, // { startedAt, focusMinutes, breakMinutes } while one is running
   blockedSites: [], // e.g. ["facebook.com", "youtube.com"]
   // { id, label, days:[0-6] (0=Sun), start:"HH:MM", end:"HH:MM", enabled:true }
   // Only used until schedules are first saved; deleting both leaves an empty list, not these.
   schedules: [
-    { id: "default-morning", label: "Work — morning", days: [1, 2, 3, 4, 5], start: "09:00", end: "13:00", enabled: true },
-    { id: "default-afternoon", label: "Work — afternoon", days: [1, 2, 3, 4, 5], start: "14:00", end: "18:00", enabled: true },
+    { id: "default-morning", label: "Morning", days: [1, 2, 3, 4, 5], start: "09:00", end: "13:00", enabled: true },
+    { id: "default-afternoon", label: "Afternoon", days: [1, 2, 3, 4, 5], start: "14:00", end: "18:00", enabled: true },
   ],
   // { id, name } in display order. Categories only group sites on the settings page; every site
   // follows the same schedules. Like schedules, only used until first saved.
@@ -135,8 +145,49 @@ function getBlockUntilDate(schedules, now) {
   return latest;
 }
 
+function normalizeSessionSettings(settings) {
+  const s = settings || {};
+  return {
+    focusMinutes: SESSION_FOCUS_OPTIONS.includes(s.focusMinutes) ? s.focusMinutes : DEFAULT_STATE.sessionSettings.focusMinutes,
+    breakMinutes: SESSION_BREAK_OPTIONS.includes(s.breakMinutes) ? s.breakMinutes : DEFAULT_STATE.sessionSettings.breakMinutes,
+  };
+}
+
+// Where a running session is at `now`: { phase: "focus" | "break", round (from 1), endsAt (epoch
+// ms) }, or null if there's no session. Rounds of focus then break repeat until the session ends.
+function getSessionPhase(session, now) {
+  if (!session || !session.startedAt) return null;
+  const focus = session.focusMinutes * 60000;
+  const pause = session.breakMinutes * 60000;
+  const elapsed = now.getTime() - session.startedAt;
+  if (!(focus > 0) || !(pause > 0) || elapsed < 0) return null;
+  const cycle = focus + pause;
+  const index = Math.floor(elapsed / cycle);
+  const roundStart = session.startedAt + index * cycle;
+  const inFocus = elapsed - index * cycle < focus;
+  return { phase: inFocus ? "focus" : "break", round: index + 1, endsAt: roundStart + (inFocus ? focus : cycle) };
+}
+
+// The running session's phase, or null in schedules mode or with no session running.
+function getCurrentSessionPhase(state, now) {
+  return state.mode === "sessions" ? getSessionPhase(state.session, now) : null;
+}
+
 function isBlockingActive(state, now) {
+  if (state.mode === "sessions") {
+    const phase = getSessionPhase(state.session, now);
+    return Boolean(phase) && phase.phase === "focus";
+  }
   return getActiveSchedules(state.schedules, now).length > 0;
+}
+
+// When does the current focus time end? A Date, or null when nothing is blocking.
+function getFocusEndDate(state, now) {
+  if (state.mode === "sessions") {
+    const phase = getSessionPhase(state.session, now);
+    return phase && phase.phase === "focus" ? new Date(phase.endsAt) : null;
+  }
+  return getBlockUntilDate(state.schedules, now);
 }
 
 // `site` should be a canonical blockedSites entry (see findBlockedSiteMatch), not a raw hostname.
@@ -228,16 +279,21 @@ function buildBlockRules(state, now, blockedPageUrl) {
   return rules;
 }
 
-// When can buildBlockRules next return something different? The nearest schedule start or end,
-// or unlock expiry, after `now` (epoch ms), or null if nothing is coming up. It ignores days, so
-// it may name a time when nothing changes; rebuilding then is harmless.
+// When can buildBlockRules next return something different? The nearest schedule start or end (or
+// session phase change, in sessions mode), or unlock expiry, after `now` (epoch ms), or null if
+// nothing is coming up. It ignores days, so it may name a time when nothing changes; rebuilding
+// then is harmless.
 function getNextRuleChange(state, now) {
   const t = now.getTime();
   let next = null;
   const consider = (ms) => {
     if (ms > t && (next === null || ms < next)) next = ms;
   };
-  for (const schedule of state.schedules || []) {
+  if (state.mode === "sessions") {
+    const phase = getSessionPhase(state.session, now);
+    if (phase) consider(phase.endsAt);
+  }
+  for (const schedule of state.mode === "sessions" ? [] : state.schedules || []) {
     if (!schedule || schedule.enabled === false) continue;
     for (const hm of [schedule.start, schedule.end]) {
       const minutes = parseHM(hm);
@@ -257,6 +313,8 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     MAX_UNLOCK_MINUTES,
     MAX_UNLOCKS_PER_DAY,
+    SESSION_FOCUS_OPTIONS,
+    SESSION_BREAK_OPTIONS,
     DEFAULT_STATE,
     normalizeHost,
     normalizeSiteInput,
@@ -271,6 +329,10 @@ if (typeof module !== "undefined" && module.exports) {
     getActiveSchedules,
     getBlockUntilDate,
     isBlockingActive,
+    normalizeSessionSettings,
+    getSessionPhase,
+    getCurrentSessionPhase,
+    getFocusEndDate,
     getUnlockExpiry,
     isSiteUnlocked,
     pruneExpiredUnlocks,
