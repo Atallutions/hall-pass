@@ -58,7 +58,7 @@ session with lengths other than the ones offered. The code and
 storage call passes "unlocks".
 
 `common.js` has the scheduling, matching and rule-building logic. The
-background script and every page load it.
+background script and every page load it. The pages also share `common.css`.
 
 ## Development
 

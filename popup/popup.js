@@ -1,4 +1,4 @@
-/* global browser, normalizeSiteInput, formatHM, getFocusEndDate, getCurrentSessionPhase, normalizeSessionSettings, findBlockedSiteMatch, isSiteUnlocked, getUnlockExpiry, MAX_UNLOCKS_PER_DAY, getUnlocksRemainingToday */
+/* global browser, normalizeSiteInput, formatHM, getFocusEndDate, getCurrentSessionPhase, findBlockedSiteMatch, isSiteUnlocked, getUnlockExpiry, getUnlocksRemainingToday, onButtonClick, renderAllowance */
 "use strict";
 
 const statusBadge = document.getElementById("status-badge");
@@ -9,8 +9,6 @@ const currentSiteName = document.getElementById("current-site-name");
 const currentSiteDetail = document.getElementById("current-site-detail");
 const unlockBtn = document.getElementById("unlock-btn");
 const allowance = document.getElementById("allowance");
-const allowancePips = document.getElementById("allowance-pips");
-const allowanceText = document.getElementById("allowance-text");
 const unlockTimer = document.getElementById("unlock-timer");
 const openOptionsBtn = document.getElementById("open-options-btn");
 const addSiteBtn = document.getElementById("add-site-btn");
@@ -28,9 +26,8 @@ const BLOCKED_PAGE_URL = browser.runtime.getURL("blocked/blocked.html");
 
 let currentMatchedSite = null;
 let currentHostname = null;
-let currentState = null;
-let currentSiteWasUnlocked = false;
 let currentPhaseEnd = 0;
+let currentUnlockEnd = 0;
 
 function currentTabHostname() {
   return browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
@@ -48,13 +45,6 @@ function currentTabHostname() {
   });
 }
 
-function updateUnlockTimer(now) {
-  const remaining = getUnlockExpiry(currentState, currentMatchedSite) - now.getTime();
-  const mm = Math.floor(remaining / 60000);
-  const ss = Math.floor((remaining % 60000) / 1000);
-  unlockTimer.textContent = `${mm}:${ss.toString().padStart(2, "0")}`;
-}
-
 function formatCountdown(ms) {
   const totalSeconds = Math.max(Math.ceil(ms / 1000), 0);
   const mm = Math.floor(totalSeconds / 60);
@@ -62,24 +52,15 @@ function formatCountdown(ms) {
   return `${mm}:${ss.toString().padStart(2, "0")}`;
 }
 
-// Ticks the session clock and this tab's unlock timer; when either runs out, re-render.
 setInterval(() => {
-  const now = new Date();
-  if (currentPhaseEnd) {
-    if (now.getTime() >= currentPhaseEnd) {
-      currentPhaseEnd = 0;
-      refresh();
-      return;
-    }
-    sessionTimer.textContent = formatCountdown(currentPhaseEnd - now.getTime());
-  }
-  if (!currentSiteWasUnlocked) return;
-  if (isSiteUnlocked(currentState, currentMatchedSite, now)) {
-    updateUnlockTimer(now);
-  } else {
-    currentSiteWasUnlocked = false;
+  const now = Date.now();
+  if ((currentPhaseEnd && now >= currentPhaseEnd) || (currentUnlockEnd && now >= currentUnlockEnd)) {
+    currentPhaseEnd = currentUnlockEnd = 0;
     refresh();
+    return;
   }
+  if (currentPhaseEnd) sessionTimer.textContent = formatCountdown(currentPhaseEnd - now);
+  if (currentUnlockEnd) unlockTimer.textContent = formatCountdown(currentUnlockEnd - now);
 }, 1000);
 
 function renderSession(state, now) {
@@ -89,7 +70,7 @@ function renderSession(state, now) {
   if (!sessionsMode) return;
 
   const phase = getCurrentSessionPhase(state, now);
-  const settings = phase ? state.session : normalizeSessionSettings(state.sessionSettings);
+  const settings = phase ? state.session : state.sessionSettings;
   const rhythm = `${settings.focusMinutes} min sessions, ${settings.breakMinutes} min breaks`;
   sessionClock.hidden = !phase;
   startSessionBtn.hidden = Boolean(phase);
@@ -117,29 +98,13 @@ function setChip(text, variant) {
   currentSiteChip.className = `chip chip-${variant}`;
 }
 
-function renderAllowance(remaining) {
-  allowance.hidden = false;
-  allowancePips.innerHTML = "";
-  for (let i = 0; i < MAX_UNLOCKS_PER_DAY; i++) {
-    const pip = document.createElement("span");
-    pip.className = i < remaining ? "pip left" : "pip";
-    allowancePips.appendChild(pip);
-  }
-  allowance.classList.toggle("exhausted", remaining === 0);
-  allowanceText.textContent =
-    remaining > 0
-      ? `${remaining} of ${MAX_UNLOCKS_PER_DAY} passes left today`
-      : "No passes left today";
-}
-
-async function render(status, hostname) {
+function render(status, hostname) {
   const { state, blockingActive } = status;
   const now = new Date(status.now);
 
   currentMatchedSite = hostname ? findBlockedSiteMatch(state.blockedSites, hostname) : null;
   currentHostname = hostname;
-  currentState = state;
-  currentSiteWasUnlocked = false;
+  currentUnlockEnd = 0;
   accessWarning.hidden = status.hostAccess !== false;
 
   renderSession(state, now);
@@ -149,7 +114,6 @@ async function render(status, hostname) {
     statusBadge.className = "pill pill-on";
     statusLabel.textContent = sessionsMode ? "Focus" : "Blocking";
     const until = getFocusEndDate(state, now);
-    // The session card already says when the break starts.
     statusDetail.textContent = until && !sessionsMode ? `Sites stay blocked until ${formatHM(until)}.` : "";
   } else if (phase) {
     statusBadge.className = "pill pill-off";
@@ -198,14 +162,14 @@ async function render(status, hostname) {
   }
 
   const remaining = getUnlocksRemainingToday(state, currentMatchedSite, now);
-  renderAllowance(remaining);
+  renderAllowance(remaining, "No passes left today");
 
   if (isSiteUnlocked(state, currentMatchedSite, now)) {
     setChip("Temporarily unlocked", "unlocked");
     currentSiteDetail.textContent = "";
-    currentSiteWasUnlocked = true;
+    currentUnlockEnd = getUnlockExpiry(state, currentMatchedSite);
     unlockTimer.hidden = false;
-    updateUnlockTimer(now);
+    unlockTimer.textContent = formatCountdown(currentUnlockEnd - now.getTime());
     return;
   }
 
@@ -225,58 +189,30 @@ async function refresh() {
     browser.runtime.sendMessage({ type: "getStatus" }),
     currentTabHostname(),
   ]);
-  await render(status, hostname);
+  render(status, hostname);
+  return status;
 }
 
-unlockBtn.addEventListener("click", async () => {
-  if (!currentMatchedSite) return;
-  unlockBtn.disabled = true;
-  try {
-    await browser.runtime.sendMessage({ type: "requestUnlock", site: currentMatchedSite });
-    await refresh();
-  } finally {
-    unlockBtn.disabled = false;
-  }
-});
+async function sendAndRefresh(message) {
+  await browser.runtime.sendMessage(message);
+  await refresh();
+}
 
-addSiteBtn.addEventListener("click", async () => {
+onButtonClick(unlockBtn, () => sendAndRefresh({ type: "requestUnlock", site: currentMatchedSite }));
+onButtonClick(startSessionBtn, () => sendAndRefresh({ type: "startSession" }));
+onButtonClick(endSessionBtn, () => sendAndRefresh({ type: "endSession" }));
+
+onButtonClick(addSiteBtn, async () => {
   const site = normalizeSiteInput(currentHostname);
   if (!site) return;
-  addSiteBtn.disabled = true;
-  try {
-    const { blockedSites } = await browser.storage.local.get({ blockedSites: [] });
-    if (!blockedSites.includes(site)) {
-      blockedSites.push(site);
-      blockedSites.sort();
-      await browser.storage.local.set({ blockedSites });
-    }
-    const status = await browser.runtime.sendMessage({ type: "getStatus" });
-    // Reload so the page is actually blocked now instead of on the next navigation.
-    if (status.blockingActive) await browser.tabs.reload();
-    await refresh();
-  } finally {
-    addSiteBtn.disabled = false;
+  const { blockedSites } = await browser.storage.local.get({ blockedSites: [] });
+  if (!blockedSites.includes(site)) {
+    blockedSites.push(site);
+    blockedSites.sort();
+    await browser.storage.local.set({ blockedSites });
   }
-});
-
-startSessionBtn.addEventListener("click", async () => {
-  startSessionBtn.disabled = true;
-  try {
-    await browser.runtime.sendMessage({ type: "startSession" });
-    await refresh();
-  } finally {
-    startSessionBtn.disabled = false;
-  }
-});
-
-endSessionBtn.addEventListener("click", async () => {
-  endSessionBtn.disabled = true;
-  try {
-    await browser.runtime.sendMessage({ type: "endSession" });
-    await refresh();
-  } finally {
-    endSessionBtn.disabled = false;
-  }
+  const status = await refresh();
+  if (status.blockingActive) await browser.tabs.reload();
 });
 
 grantAccessBtn.addEventListener("click", async () => {

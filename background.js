@@ -1,15 +1,9 @@
-/* global browser, importScripts, DEFAULT_STATE, formatHM, normalizeSessionSettings, getCurrentSessionPhase, isBlockingActive, isSiteUnlocked, getUnlockExpiry, pruneExpiredUnlocks, clampUnlockMinutes, normalizeHost, getUnlocksRemainingToday, recordUnlock, buildBlockRules, getNextRuleChange */
+/* global browser, importScripts, MAX_UNLOCK_MINUTES, loadState, formatHM, getCurrentSessionPhase, isBlockingActive, isSiteUnlocked, pruneExpiredUnlocks, normalizeHost, getUnlocksRemainingToday, recordUnlock, buildBlockRules, getNextRuleChange */
 "use strict";
 
 // Chrome runs this file alone as a service worker; Firefox loads common.js first via "scripts".
 if (typeof importScripts === "function") importScripts("common.js");
 
-async function getState() {
-  return browser.storage.local.get(DEFAULT_STATE);
-}
-
-// Unlock state is read-modify-write; run those updates one at a time so two quick
-// requests can't both read the same count and slip past the daily limit.
 let unlockQueue = Promise.resolve();
 function serialized(fn) {
   const run = unlockQueue.then(fn);
@@ -17,56 +11,61 @@ function serialized(fn) {
   return run;
 }
 
-async function setSiteUnlock(site, minutes) {
+async function setSiteUnlock(site) {
   const key = normalizeHost(site);
-  const clamped = clampUnlockMinutes(minutes);
   const now = new Date();
-  const state = await getState();
+  const state = await loadState();
 
-  // Already open: don't extend the timer or spend another unlock.
-  if (isSiteUnlocked(state, key, now)) {
-    return { expiry: getUnlockExpiry(state, key), remaining: getUnlocksRemainingToday(state, key, now) };
-  }
-  if (getUnlocksRemainingToday(state, key, now) <= 0) {
-    return { error: "daily-limit-reached", remaining: 0 };
-  }
+  if (isSiteUnlocked(state, key, now)) return {};
+  if (getUnlocksRemainingToday(state, key, now) <= 0) return { error: "daily-limit-reached" };
 
   const unlocks = pruneExpiredUnlocks(state.unlocks, now);
-  const expiry = now.getTime() + clamped * 60 * 1000;
-  unlocks[key] = expiry;
+  unlocks[key] = now.getTime() + MAX_UNLOCK_MINUTES * 60 * 1000;
   const unlockUsage = recordUnlock(state.unlockUsage, key, now);
   await browser.storage.local.set({ unlocks, unlockUsage });
-  // Wait for the new rules, so a caller that navigates next isn't sent back to the block page.
   await syncRules();
-  return { expiry, remaining: getUnlocksRemainingToday({ unlockUsage }, key, now) };
+  return {};
 }
 
-// Blocking is done by declarativeNetRequest rules (see buildBlockRules), not by this script, which
-// Chrome and Firefox stop when idle. Every change that can affect the rules calls syncRules:
-// storage changes, the alarm at the next schedule boundary or unlock expiry, startup, and a
-// once-a-minute heartbeat in case an alarm is late or the clock changes.
 const BLOCKED_PAGE_URL = browser.runtime.getURL("blocked/blocked.html");
 const NEXT_CHANGE_ALARM = "next-change";
 const HEARTBEAT_ALARM = "heartbeat";
 
-// updateDynamicRules must not interleave: two runs could both remove the same old rules and
-// then add rules with the same ids.
+// Overlapping runs could add rule ids that already exist, which updateDynamicRules rejects.
 let rulesQueue = Promise.resolve();
+let waitingSync = null;
 function syncRules() {
-  rulesQueue = rulesQueue.then(applyRules).catch((err) => {
-    console.error("Hall Pass: error syncing rules", err);
-  });
-  return rulesQueue;
+  if (!waitingSync) {
+    waitingSync = rulesQueue
+      .then(() => {
+        waitingSync = null;
+        return applyRules();
+      })
+      .catch((err) => {
+        console.error("Hall Pass: error syncing rules", err);
+      });
+    rulesQueue = waitingSync;
+  }
+  return waitingSync;
 }
 
 async function applyRules() {
-  const state = await getState();
+  const [state, { appliedRules = "" }] = await Promise.all([
+    loadState(),
+    browser.storage.session.get("appliedRules"),
+  ]);
   const now = new Date();
-  const existing = await browser.declarativeNetRequest.getDynamicRules();
-  await browser.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: existing.map((rule) => rule.id),
-    addRules: buildBlockRules(state, now, BLOCKED_PAGE_URL),
-  });
+  const rules = buildBlockRules(state, now, BLOCKED_PAGE_URL);
+  // Firefox writes the rules to disk on every update, even an identical one.
+  const rulesJson = JSON.stringify(rules);
+  if (rulesJson !== appliedRules) {
+    const existing = await browser.declarativeNetRequest.getDynamicRules();
+    await browser.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: existing.map((rule) => rule.id),
+      addRules: rules,
+    });
+    await browser.storage.session.set({ appliedRules: rulesJson });
+  }
 
   const next = getNextRuleChange(state, now);
   if (next) {
@@ -74,7 +73,8 @@ async function applyRules() {
   } else {
     await browser.alarms.clear(NEXT_CHANGE_ALARM);
   }
-  // Re-creating an existing periodic alarm would restart its period on every run.
+  // The heartbeat covers an alarm that fires late or a change of the system clock.
+  // Creating an alarm that already exists restarts its period.
   if (!(await browser.alarms.get(HEARTBEAT_ALARM))) {
     await browser.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
   }
@@ -82,12 +82,10 @@ async function applyRules() {
   await announceSessionPhase(state, now);
 }
 
-// Sessions: one notification when a break starts and one when the next round starts. The last
-// phase announced is kept in storage.session, which survives this script being stopped but not
-// a browser restart (and a restart ends the session anyway).
 async function announceSessionPhase(state, now) {
   const phase = getCurrentSessionPhase(state, now);
   const key = phase ? `${state.session.startedAt}:${phase.round}:${phase.phase}` : "";
+  // storage.session outlives this script, which the browser stops when idle.
   const { seenPhase = "" } = await browser.storage.session.get("seenPhase");
   if (key === seenPhase) return;
   await browser.storage.session.set({ seenPhase: key });
@@ -114,17 +112,15 @@ function hasHostAccess() {
 const messageHandlers = {
   async requestUnlock(msg) {
     if (!msg.site) throw new Error("requestUnlock requires a site");
-    return serialized(() => setSiteUnlock(msg.site, msg.minutes));
+    return serialized(() => setSiteUnlock(msg.site));
   },
-  // The lengths come from the settings, limited to the allowed options, never from the message.
   async startSession() {
-    const state = await getState();
+    const state = await loadState();
     if (state.mode !== "sessions") throw new Error("Sessions and breaks mode is off");
-    if (state.session) return { session: state.session };
-    const session = { startedAt: Date.now(), ...normalizeSessionSettings(state.sessionSettings) };
-    await browser.storage.local.set({ session });
+    if (state.session) return {};
+    await browser.storage.local.set({ session: { startedAt: Date.now(), ...state.sessionSettings } });
     await syncRules();
-    return { session };
+    return {};
   },
   async endSession() {
     await browser.storage.local.set({ session: null });
@@ -132,9 +128,8 @@ const messageHandlers = {
     return {};
   },
   async getStatus() {
-    // Also repairs stale rules, e.g. when the block page opens just after a schedule ended.
     await syncRules();
-    const [state, hostAccess] = await Promise.all([getState(), hasHostAccess()]);
+    const [state, hostAccess] = await Promise.all([loadState(), hasHostAccess()]);
     const now = new Date();
     return { state, now: now.getTime(), blockingActive: isBlockingActive(state, now), hostAccess };
   },

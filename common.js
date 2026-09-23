@@ -122,22 +122,15 @@ function getActiveSchedules(schedules, now) {
   return (schedules || []).filter((s) => isScheduleActive(s, now));
 }
 
-// For display: when does the currently-active blocking window end?
-// Returns a Date, or null if nothing is active.
 function getBlockUntilDate(schedules, now) {
-  const active = getActiveSchedules(schedules, now);
-  if (active.length === 0) return null;
-
   let latest = null;
-  for (const schedule of active) {
+  for (const schedule of getActiveSchedules(schedules, now)) {
     const end = parseHM(schedule.end);
     const start = parseHM(schedule.start);
     const wraps = start >= end;
     const endDate = new Date(now);
-    endDate.setSeconds(0, 0);
     endDate.setHours(0, end, 0, 0);
     if (wraps && now.getHours() * 60 + now.getMinutes() >= start) {
-      // End time is tomorrow relative to today's start.
       endDate.setDate(endDate.getDate() + 1);
     }
     if (!latest || endDate > latest) latest = endDate;
@@ -210,13 +203,7 @@ function pruneExpiredUnlocks(unlocks, now) {
   return pruned;
 }
 
-function clampUnlockMinutes(minutes) {
-  const n = Number(minutes);
-  const safe = Number.isFinite(n) ? n : MAX_UNLOCK_MINUTES;
-  return Math.min(Math.max(safe, 1), MAX_UNLOCK_MINUTES);
-}
-
-// Local calendar day, so the daily unlock allowance resets at local midnight.
+// Not toISOString(), which gives the UTC date; passes reset at local midnight.
 function dayKey(date) {
   return (
     date.getFullYear() +
@@ -250,18 +237,12 @@ function recordUnlock(usage, site, now) {
 // (e.g. "localhost:3000" or non-punycode), so skip those instead of losing every rule.
 const RULE_DOMAIN = /^[a-z0-9-]+(\.[a-z0-9-]+)*$/;
 
-// declarativeNetRequest rules for right now: none outside a schedule, otherwise one per blocked site.
-// A site redirects to the block page, with the original URL after "#". An unlocked site gets an
-// "allow" rule instead. Earlier list entries get higher priority, so when two entries cover a host
-// (reddit.com and old.reddit.com), the one findBlockedSiteMatch picks decides, as in the UI.
 function buildBlockRules(state, now, blockedPageUrl) {
   if (!isBlockingActive(state, now)) return [];
-  const sites = (state.blockedSites || []).map(normalizeHost);
-  const rules = [];
-  sites.forEach((site, index) => {
-    if (!RULE_DOMAIN.test(site)) return;
+  const sites = (state.blockedSites || []).map(normalizeHost).filter((site) => RULE_DOMAIN.test(site));
+  return sites.map((site, index) => {
     const rule = {
-      id: rules.length + 1,
+      id: index + 1,
       priority: sites.length - index,
       condition: { requestDomains: [site], resourceTypes: ["main_frame"] },
     };
@@ -274,41 +255,68 @@ function buildBlockRules(state, now, blockedPageUrl) {
         redirect: { regexSubstitution: blockedPageUrl + "?site=" + encodeURIComponent(site) + "#\\0" },
       };
     }
-    rules.push(rule);
+    return rule;
   });
-  return rules;
 }
 
-// When can buildBlockRules next return something different? The nearest schedule start or end (or
-// session phase change, in sessions mode), or unlock expiry, after `now` (epoch ms), or null if
-// nothing is coming up. It ignores days, so it may name a time when nothing changes; rebuilding
-// then is harmless.
 function getNextRuleChange(state, now) {
   const t = now.getTime();
-  let next = null;
-  const consider = (ms) => {
-    if (ms > t && (next === null || ms < next)) next = ms;
-  };
+  const times = Object.values(state.unlocks || {});
   if (state.mode === "sessions") {
     const phase = getSessionPhase(state.session, now);
-    if (phase) consider(phase.endsAt);
-  }
-  for (const schedule of state.mode === "sessions" ? [] : state.schedules || []) {
-    if (!schedule || schedule.enabled === false) continue;
-    for (const hm of [schedule.start, schedule.end]) {
-      const minutes = parseHM(hm);
-      if (Number.isNaN(minutes)) continue;
-      const at = new Date(now);
-      at.setHours(0, minutes, 0, 0);
-      if (at.getTime() <= t) at.setDate(at.getDate() + 1);
-      consider(at.getTime());
+    if (phase) times.push(phase.endsAt);
+  } else {
+    for (const schedule of state.schedules || []) {
+      if (!schedule || schedule.enabled === false) continue;
+      for (const hm of [schedule.start, schedule.end]) {
+        const minutes = parseHM(hm);
+        if (Number.isNaN(minutes)) continue;
+        const at = new Date(now);
+        at.setHours(0, minutes, 0, 0);
+        if (at.getTime() <= t) at.setDate(at.getDate() + 1);
+        times.push(at.getTime());
+      }
     }
   }
-  for (const expiry of Object.values(state.unlocks || {})) consider(expiry);
-  return next;
+  const upcoming = times.filter((ms) => ms > t);
+  return upcoming.length ? Math.min(...upcoming) : null;
 }
 
-// Node/CommonJS export for unit testing; ignored by the browser (no module system there).
+async function loadState() {
+  const state = await browser.storage.local.get(DEFAULT_STATE);
+  state.sessionSettings = normalizeSessionSettings(state.sessionSettings);
+  return state;
+}
+
+function onButtonClick(button, action) {
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await action();
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
+function renderPips(container, filled) {
+  container.replaceChildren();
+  for (let i = 0; i < MAX_UNLOCKS_PER_DAY; i++) {
+    const pip = document.createElement("span");
+    pip.className = i < filled ? "pip filled" : "pip";
+    container.appendChild(pip);
+  }
+}
+
+function renderAllowance(remaining, noneLeftText) {
+  const allowance = document.getElementById("allowance");
+  allowance.hidden = false;
+  allowance.classList.toggle("exhausted", remaining === 0);
+  renderPips(document.getElementById("allowance-pips"), remaining);
+  document.getElementById("allowance-text").textContent =
+    remaining > 0 ? `${remaining} of ${MAX_UNLOCKS_PER_DAY} passes left today` : noneLeftText;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     MAX_UNLOCK_MINUTES,
@@ -336,7 +344,6 @@ if (typeof module !== "undefined" && module.exports) {
     getUnlockExpiry,
     isSiteUnlocked,
     pruneExpiredUnlocks,
-    clampUnlockMinutes,
     dayKey,
     getUnlocksUsedToday,
     getUnlocksRemainingToday,

@@ -10,7 +10,6 @@ const {
   isBlockingActive,
   isSiteUnlocked,
   pruneExpiredUnlocks,
-  clampUnlockMinutes,
   MAX_UNLOCKS_PER_DAY,
   dayKey,
   getUnlocksUsedToday,
@@ -95,10 +94,6 @@ check(
   untilOvernight && untilOvernight.getDate(),
   at("06:00", 1).getDate()
 );
-
-// --- per-site unlock ---
-check("clampUnlockMinutes caps at 5", clampUnlockMinutes(30), 5);
-check("clampUnlockMinutes floors at 1", clampUnlockMinutes(0), 1);
 
 const now = new Date();
 const unlockedState = { unlocks: { "facebook.com": now.getTime() + 1000 } };

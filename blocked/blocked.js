@@ -1,4 +1,4 @@
-/* global browser, formatHM, getFocusEndDate, getActiveSchedules, getCurrentSessionPhase, getUnlocksRemainingToday, MAX_UNLOCKS_PER_DAY */
+/* global browser, formatHM, getFocusEndDate, getActiveSchedules, getCurrentSessionPhase, getUnlocksRemainingToday, renderAllowance */
 "use strict";
 
 const params = new URLSearchParams(location.search);
@@ -27,8 +27,6 @@ const closeBtn = document.getElementById("close-btn");
 const continueBtn = document.getElementById("continue-btn");
 const unlockBtn = document.getElementById("unlock-btn");
 const allowance = document.getElementById("allowance");
-const allowancePips = document.getElementById("allowance-pips");
-const allowanceText = document.getElementById("allowance-text");
 
 document.title = `${site} is blocked`;
 document.getElementById("site-name").textContent = site;
@@ -45,26 +43,14 @@ function formatTimeLeft(ms) {
   return m === 0 ? `in ${h} h` : `in ${h} h ${m} min`;
 }
 
-function renderAllowance(remaining) {
-  allowance.hidden = false;
-  allowancePips.innerHTML = "";
-  for (let i = 0; i < MAX_UNLOCKS_PER_DAY; i++) {
-    const pip = document.createElement("span");
-    pip.className = i < remaining ? "pip left" : "pip";
-    allowancePips.appendChild(pip);
-  }
-  allowance.classList.toggle("exhausted", remaining === 0);
-  allowanceText.textContent =
-    remaining > 0
-      ? `${remaining} of ${MAX_UNLOCKS_PER_DAY} passes left today`
-      : "Resets at midnight";
+function renderPasses(remaining) {
+  renderAllowance(remaining, "Resets at midnight");
   if (remaining === 0) {
     unlockBtn.disabled = true;
     unlockBtn.textContent = "No passes left today";
   }
 }
 
-// Focus time can end while this page is open; offer the way through instead of a stale countdown.
 function renderEnded(onBreak) {
   reopenAt = null;
   icon.classList.add("ended");
@@ -101,7 +87,7 @@ async function render() {
     reopenIn.textContent = formatTimeLeft(reopenAt - now);
   }
 
-  renderAllowance(getUnlocksRemainingToday(status.state, site, now));
+  renderPasses(getUnlocksRemainingToday(status.state, site, now));
 }
 
 setInterval(() => {
@@ -128,7 +114,7 @@ unlockBtn.addEventListener("click", async () => {
   unlockBtn.textContent = "Using a pass…";
   const result = await browser.runtime.sendMessage({ type: "requestUnlock", site });
   if (result && result.error) {
-    renderAllowance(0);
+    renderPasses(0);
     return;
   }
   if (from) {

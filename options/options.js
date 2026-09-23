@@ -1,4 +1,4 @@
-/* global browser, DEFAULT_STATE, DAY_LABELS, normalizeSiteInput, getUnlocksUsedToday, MAX_UNLOCKS_PER_DAY, isBlockingActive, getFocusEndDate, getCurrentSessionPhase, normalizeSessionSettings, SESSION_FOCUS_OPTIONS, SESSION_BREAK_OPTIONS, formatHM, parseHM, getSiteCategoryId, getSitesInCategory */
+/* global browser, DEFAULT_STATE, DAY_LABELS, loadState, normalizeSiteInput, getUnlocksUsedToday, MAX_UNLOCKS_PER_DAY, isBlockingActive, getFocusEndDate, getCurrentSessionPhase, SESSION_FOCUS_OPTIONS, SESSION_BREAK_OPTIONS, formatHM, parseHM, getSiteCategoryId, getSitesInCategory, renderPips, onButtonClick */
 "use strict";
 
 const statusBadge = document.getElementById("status-badge");
@@ -36,41 +36,35 @@ const endSessionBtn = document.getElementById("end-session-btn");
 
 // Hash id of the "Uncategorized" tab. Category ids are UUIDs or the short default ids.
 const UNCATEGORIZED = "uncategorized";
+const DAYS_FROM_MONDAY = [1, 2, 3, 4, 5, 6, 0];
 
 let state = structuredClone(DEFAULT_STATE);
-// { tab: "welcome" | "schedules" } or { tab: "sites", categoryId }, where a null categoryId is
-// the "Uncategorized" tab.
 let route = { tab: "welcome" };
-
-function genId() {
-  return (crypto.randomUUID && crypto.randomUUID()) || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function plural(n, word) {
   return n === 1 ? word : word + "s";
 }
 
 async function load() {
-  state = await browser.storage.local.get(DEFAULT_STATE);
-  state.sessionSettings = normalizeSessionSettings(state.sessionSettings);
+  state = await loadState();
+  renderLengthOptions(focusOptions, "focus-length", SESSION_FOCUS_OPTIONS, "focusMinutes");
+  renderLengthOptions(breakOptions, "break-length", SESSION_BREAK_OPTIONS, "breakMinutes");
   renderSchedules();
   renderMode();
   renderStatus();
+  renderWelcome();
   applyRoute();
 }
 
-// Schedules and categories aren't refreshed live; re-rendering them would steal focus mid-edit.
-// blockedSites is, so a site added from the popup isn't lost on this page's next save.
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
   if (changes.unlockUsage) state.unlockUsage = changes.unlockUsage.newValue;
-  if (changes.blockedSites) state.blockedSites = changes.blockedSites.newValue || [];
   if (changes.blockedSites) {
+    state.blockedSites = changes.blockedSites.newValue || [];
     renderNav();
     renderWelcome();
   }
   if (changes.unlockUsage || changes.blockedSites) renderSites();
-  // Sessions start and end from the popup too.
   if (changes.session) {
     state.session = changes.session.newValue || null;
     renderSessionControl();
@@ -78,7 +72,6 @@ browser.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// Counts roll over at midnight without a storage change; refresh when the tab comes back.
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     renderSites();
@@ -90,16 +83,9 @@ setInterval(() => {
   renderSessionControl();
 }, 15 * 1000);
 
-async function save() {
+async function save(...keys) {
   renderStatus();
-  await browser.storage.local.set({
-    blockedSites: state.blockedSites,
-    schedules: state.schedules,
-    categories: state.categories,
-    siteCategories: state.siteCategories,
-    mode: state.mode,
-    sessionSettings: state.sessionSettings,
-  });
+  await browser.storage.local.set(Object.fromEntries(keys.map((key) => [key, state[key]])));
 }
 
 function renderStatus() {
@@ -152,7 +138,6 @@ function applyRoute() {
   if (location.hash !== hash) history.replaceState(null, "", hash);
   for (const [tab, panel] of Object.entries(panels)) panel.hidden = tab !== route.tab;
   renderNav();
-  renderWelcome();
   if (route.tab === "sites") {
     renderCategoryHeader();
     renderSites();
@@ -198,8 +183,8 @@ function renderNav() {
     if (link.dataset.tab === route.tab) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
-  const enabled = state.schedules.filter((s) => s.enabled !== false).length;
-  schedulesCount.textContent = state.mode === "sessions" ? "" : enabled ? String(enabled) : "";
+  const enabled = enabledScheduleCount();
+  schedulesCount.textContent = state.mode !== "sessions" && enabled ? String(enabled) : "";
   sitesTotal.textContent = state.blockedSites.length ? String(state.blockedSites.length) : "";
 
   categoryNav.innerHTML = "";
@@ -209,28 +194,22 @@ function renderNav() {
     const current = onSites && route.categoryId === category.id;
     categoryNav.appendChild(navItem(routeHash(sitesRoute(category.id)), categoryName(category.id), count, current));
   }
-  // Only there when it has something in it, or while you're on it.
   const uncategorized = getSitesInCategory(state, null).length;
   const onUncategorized = onSites && route.categoryId === null;
   if (uncategorized || onUncategorized) {
-    const link = navItem(routeHash(sitesRoute(null)), "Uncategorized", uncategorized, onUncategorized);
+    const link = navItem(routeHash(sitesRoute(null)), categoryName(null), uncategorized, onUncategorized);
     link.classList.add("nav-uncategorized");
     categoryNav.appendChild(link);
   }
 }
 
 function renderWelcome() {
-  const sites = state.blockedSites.length;
-  heroCta.textContent = sites ? "Manage blocked sites" : "Add your first site";
-  heroCta.href = routeHash(firstSitesRoute());
+  heroCta.textContent = state.blockedSites.length ? "Manage blocked sites" : "Add your first site";
   for (const tile of document.querySelectorAll(".mode-tile")) {
     tile.classList.toggle("current", tile.dataset.mode === state.mode);
   }
 }
 
-// Categories
-
-// Only on a tab change: re-setting the name field while you type in it would move the cursor.
 function renderCategoryHeader() {
   const category = currentCategory();
   categoryNameInput.hidden = !category;
@@ -246,8 +225,8 @@ categoryNameInput.addEventListener("input", async () => {
   if (!category) return;
   category.name = categoryNameInput.value;
   renderNav();
-  renderSites(); // the move menus show category names
-  await save();
+  renderSites();
+  await save("categories");
 });
 
 categoryNameInput.addEventListener("change", async () => {
@@ -255,15 +234,15 @@ categoryNameInput.addEventListener("change", async () => {
   if (!category || category.name === category.name.trim()) return;
   category.name = categoryNameInput.value = category.name.trim();
   renderNav();
-  await save();
+  await save("categories");
 });
 
 addCategoryBtn.addEventListener("click", async () => {
-  const category = { id: genId(), name: "" };
+  const category = { id: crypto.randomUUID(), name: "" };
   state.categories.push(category);
   navigate(sitesRoute(category.id));
   categoryNameInput.focus();
-  await save();
+  await save("categories");
 });
 
 removeCategoryBtn.addEventListener("click", async () => {
@@ -281,25 +260,21 @@ removeCategoryBtn.addEventListener("click", async () => {
   }
   const index = state.categories.indexOf(category);
   state.categories.splice(index, 1);
-  for (const site of sites) delete state.siteCategories[site];
-  // Show where the sites went; otherwise stay near the removed tab.
+  for (const site of sites) setSiteCategory(site, null);
   const neighbour = state.categories[index] || state.categories[index - 1];
   navigate(sitesRoute(sites.length || !neighbour ? null : neighbour.id));
-  await save();
+  await save("categories", "siteCategories");
 });
-
-// Sites
 
 function setSiteCategory(site, categoryId) {
   if (categoryId) state.siteCategories[site] = categoryId;
   else delete state.siteCategories[site];
 }
 
-// A "Move to…" menu listing the other categories, or null when there's nowhere else to go.
 function buildMoveSelect(site) {
   const currentId = getSiteCategoryId(state, site);
   const targets = state.categories.filter((c) => c.id !== currentId).map((c) => [c.id, categoryName(c.id)]);
-  if (currentId !== null) targets.push(["", "Uncategorized"]);
+  if (currentId !== null) targets.push(["", categoryName(null)]);
   if (!targets.length) return null;
 
   const select = document.createElement("select");
@@ -314,26 +289,21 @@ function buildMoveSelect(site) {
     setSiteCategory(site, select.value === UNCATEGORIZED ? null : select.value);
     renderNav();
     renderSites();
-    await save();
+    await save("siteCategories");
   });
   return select;
 }
 
-// Nothing until a site has used a pass today, so a fresh list is just names.
 function buildUsage(site, now) {
   const used = getUnlocksUsedToday(state, site, now);
   if (used === 0) return null;
   const usage = document.createElement("span");
-  usage.className = "usage";
+  usage.className = "allowance usage";
   usage.classList.toggle("exhausted", used >= MAX_UNLOCKS_PER_DAY);
   const pips = document.createElement("span");
   pips.className = "pips";
   pips.setAttribute("aria-hidden", "true");
-  for (let i = 0; i < MAX_UNLOCKS_PER_DAY; i++) {
-    const pip = document.createElement("span");
-    pip.className = i < used ? "pip used" : "pip";
-    pips.appendChild(pip);
-  }
+  renderPips(pips, used);
   usage.appendChild(pips);
   usage.appendChild(
     document.createTextNode(
@@ -370,10 +340,10 @@ function renderSites() {
     removeBtn.setAttribute("aria-label", `Remove ${site}`);
     removeBtn.addEventListener("click", async () => {
       state.blockedSites = state.blockedSites.filter((s) => s !== site);
-      delete state.siteCategories[site];
+      setSiteCategory(site, null);
       renderNav();
       renderSites();
-      await save();
+      await save("blockedSites", "siteCategories");
     });
 
     const actions = document.createElement("span");
@@ -411,7 +381,7 @@ addSiteForm.addEventListener("submit", async (e) => {
   renderSites();
   newSiteInput.value = "";
   newSiteInput.focus();
-  await save();
+  await save("blockedSites", "siteCategories");
 });
 
 newSiteInput.addEventListener("input", () => {
@@ -424,29 +394,32 @@ function renderMode() {
   for (const input of modeInputs) input.checked = input.value === state.mode;
   schedulesCard.hidden = state.mode === "sessions";
   sessionsCard.hidden = state.mode !== "sessions";
-  renderLengthOptions(focusOptions, "focus-length", SESSION_FOCUS_OPTIONS, "focusMinutes");
-  renderLengthOptions(breakOptions, "break-length", SESSION_BREAK_OPTIONS, "breakMinutes");
   renderSessionControl();
 }
 
+function buildChip(type, name, text, checked, onChange) {
+  const label = document.createElement("label");
+  label.className = "day-chip";
+  const input = document.createElement("input");
+  input.type = type;
+  if (name) input.name = name;
+  input.checked = checked;
+  input.addEventListener("change", () => onChange(input.checked));
+  const span = document.createElement("span");
+  span.textContent = text;
+  label.append(input, span);
+  return label;
+}
+
 function renderLengthOptions(container, name, minutes, key) {
-  container.innerHTML = "";
   for (const value of minutes) {
-    const label = document.createElement("label");
-    label.className = "day-chip";
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = name;
-    radio.checked = state.sessionSettings[key] === value;
-    radio.addEventListener("change", async () => {
-      state.sessionSettings = { ...state.sessionSettings, [key]: value };
-      renderSessionControl();
-      await save();
-    });
-    const text = document.createElement("span");
-    text.textContent = `${value} min`;
-    label.append(radio, text);
-    container.appendChild(label);
+    container.appendChild(
+      buildChip("radio", name, `${value} min`, state.sessionSettings[key] === value, async () => {
+        state.sessionSettings = { ...state.sessionSettings, [key]: value };
+        renderSessionControl();
+        await save("sessionSettings");
+      })
+    );
   }
 }
 
@@ -472,36 +445,17 @@ for (const input of modeInputs) {
   input.addEventListener("change", async () => {
     if (!input.checked) return;
     state.mode = input.value;
+    state.session = null;
     renderMode();
     renderNav();
     renderWelcome();
-    renderStatus();
-    await save();
-    // A running session only counts in sessions mode; don't leave one waiting for a switch back.
-    if (state.mode !== "sessions" && state.session) await browser.runtime.sendMessage({ type: "endSession" });
+    await save("mode", "session");
   });
 }
 
-startSessionBtn.addEventListener("click", async () => {
-  startSessionBtn.disabled = true;
-  try {
-    const result = await browser.runtime.sendMessage({ type: "startSession" });
-    if (result && result.session) state.session = result.session;
-    renderSessionControl();
-    renderStatus();
-  } finally {
-    startSessionBtn.disabled = false;
-  }
-});
-
-endSessionBtn.addEventListener("click", async () => {
-  await browser.runtime.sendMessage({ type: "endSession" });
-  state.session = null;
-  renderSessionControl();
-  renderStatus();
-});
-
-// Schedules
+// The storage.onChanged listener renders the session change.
+onButtonClick(startSessionBtn, () => browser.runtime.sendMessage({ type: "startSession" }));
+onButtonClick(endSessionBtn, () => browser.runtime.sendMessage({ type: "endSession" }));
 
 function renderSchedules() {
   schedulesList.innerHTML = "";
@@ -511,10 +465,12 @@ function renderSchedules() {
   renderSchedulesEmpty();
 }
 
-// With no enabled schedule nothing is ever blocked; say so instead of leaving an empty list.
+function enabledScheduleCount() {
+  return state.schedules.filter((s) => s.enabled !== false).length;
+}
+
 function renderSchedulesEmpty() {
-  const enabled = state.schedules.filter((s) => s.enabled !== false).length;
-  schedulesEmpty.hidden = enabled > 0;
+  schedulesEmpty.hidden = enabledScheduleCount() > 0;
   schedulesEmpty.textContent = state.schedules.length
     ? "All schedules are disabled, so Hall Pass isn't blocking anything."
     : "No schedules yet, so Hall Pass isn't blocking anything. Add one to set your focus time.";
@@ -528,7 +484,7 @@ function buildScheduleCard(schedule) {
   labelInput.value = schedule.label || "";
   labelInput.addEventListener("input", async () => {
     schedule.label = labelInput.value;
-    await save();
+    await save("schedules");
   });
 
   const enabledInput = card.querySelector(".schedule-enabled");
@@ -544,8 +500,7 @@ function buildScheduleCard(schedule) {
     syncEnabled();
     renderSchedulesEmpty();
     renderNav();
-    renderWelcome();
-    await save();
+    await save("schedules");
   });
 
   const removeBtn = card.querySelector(".remove-schedule-btn");
@@ -553,32 +508,21 @@ function buildScheduleCard(schedule) {
     state.schedules = state.schedules.filter((s) => s.id !== schedule.id);
     renderSchedules();
     renderNav();
-    renderWelcome();
-    await save();
+    await save("schedules");
   });
 
   const daysContainer = card.querySelector(".schedule-days");
-  // Monday first; DAY_LABELS / schedule.days stay Sunday=0.
-  [1, 2, 3, 4, 5, 6, 0].forEach((dayIndex) => {
-    const dayLabel = document.createElement("label");
-    dayLabel.className = "day-chip";
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = schedule.days.includes(dayIndex);
-    checkbox.addEventListener("change", async () => {
-      if (checkbox.checked) {
+  for (const dayIndex of DAYS_FROM_MONDAY) {
+    const onChange = async (checked) => {
+      if (checked) {
         if (!schedule.days.includes(dayIndex)) schedule.days.push(dayIndex);
       } else {
         schedule.days = schedule.days.filter((d) => d !== dayIndex);
       }
-      await save();
-    });
-    const text = document.createElement("span");
-    text.textContent = DAY_LABELS[dayIndex];
-    dayLabel.appendChild(checkbox);
-    dayLabel.appendChild(text);
-    daysContainer.appendChild(dayLabel);
-  });
+      await save("schedules");
+    };
+    daysContainer.appendChild(buildChip("checkbox", null, DAY_LABELS[dayIndex], schedule.days.includes(dayIndex), onChange));
+  }
 
   const startInput = card.querySelector(".schedule-start");
   const endInput = card.querySelector(".schedule-end");
@@ -591,14 +535,14 @@ function buildScheduleCard(schedule) {
   startInput.addEventListener("input", async () => {
     schedule.start = startInput.value;
     syncOvernight();
-    await save();
+    await save("schedules");
   });
 
   endInput.value = schedule.end;
   endInput.addEventListener("input", async () => {
     schedule.end = endInput.value;
     syncOvernight();
-    await save();
+    await save("schedules");
   });
   syncOvernight();
 
@@ -607,7 +551,7 @@ function buildScheduleCard(schedule) {
 
 addScheduleBtn.addEventListener("click", async () => {
   const schedule = {
-    id: genId(),
+    id: crypto.randomUUID(),
     label: "",
     days: [1, 2, 3, 4, 5],
     start: "09:00",
@@ -617,8 +561,7 @@ addScheduleBtn.addEventListener("click", async () => {
   state.schedules.push(schedule);
   renderSchedules();
   renderNav();
-  renderWelcome();
-  await save();
+  await save("schedules");
 });
 
 load();
