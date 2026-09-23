@@ -43,7 +43,7 @@
 }
 
 body {
-  max-width: 640px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 32px 16px 48px;
   font: 14px/1.45 system-ui, -apple-system, sans-serif;
@@ -148,7 +148,8 @@ h2 {
 /* Inputs & buttons */
 
 input[type="text"],
-input[type="time"] {
+input[type="time"],
+select {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -158,7 +159,8 @@ input[type="time"] {
 }
 
 input[type="text"]:focus,
-input[type="time"]:focus {
+input[type="time"]:focus,
+select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
   border-color: transparent;
@@ -202,6 +204,19 @@ input[type="time"]:focus {
   color: var(--red);
 }
 
+.btn-danger-ghost {
+  flex: none;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.btn-danger-ghost:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
 .btn-dashed {
   width: 100%;
   margin-top: 12px;
@@ -215,7 +230,259 @@ input[type="time"]:focus {
   border-color: var(--accent);
 }
 
+/* Layout and sidebar */
+
+.layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: var(--border);
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.nav-item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-uncategorized .nav-label {
+  font-style: italic;
+}
+
+.nav-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-heading {
+  display: flex;
+  justify-content: space-between;
+  margin: 18px 10px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.nav-add {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-add:hover {
+  background: var(--accent-soft);
+}
+
+@media (max-width: 720px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .sidebar {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .sidebar .nav-item {
+    width: auto;
+  }
+
+  .nav-heading {
+    display: none;
+  }
+
+  .category-nav {
+    display: contents;
+  }
+}
+
+/* Welcome */
+
+.welcome {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.welcome code {
+  background: var(--surface);
+}
+
+.welcome-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lead {
+  margin-top: 6px;
+  font-size: 15px;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 0;
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.1s;
+}
+
+.summary-card:hover {
+  border-color: var(--accent);
+}
+
+.summary-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.summary-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-action {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 /* Blocked sites */
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.category-header h2 {
+  flex: 1;
+}
+
+.category-header .category-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.category-header .category-name:not(:focus) {
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+}
+
+.category-header .category-name:hover:not(:focus) {
+  border-color: var(--border);
+  padding-left: 10px;
+}
+
+#uncategorized-note {
+  margin-top: 4px;
+}
+
+.add-note {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transition: opacity 0.1s;
+}
+
+/* With a mouse, the row actions appear on hover or keyboard focus; touch screens always show them. */
+@media (hover: hover) {
+  .site-list li:not(:hover):not(:focus-within) .row-actions {
+    opacity: 0;
+  }
+}
+
+.move-select {
+  appearance: none;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.move-select:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.move-select:focus {
+  outline: none;
+}
+
+.move-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
 
 .add-row {
   display: flex;
@@ -432,17 +699,6 @@ input[type="time"]:focus {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* How it works */
-
-.how-it-works {
-  background: var(--accent-soft);
-  border-color: transparent;
-}
-
-.how-it-works code {
-  background: var(--surface);
 }
 
 .steps {

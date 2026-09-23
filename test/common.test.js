@@ -19,6 +19,8 @@ const {
   DEFAULT_STATE,
   buildBlockRules,
   getNextRuleChange,
+  getSiteCategoryId,
+  getSitesInCategory,
 } = require("../common.js");
 
 function at(hhmm, dayOffsetFromThursday = 0) {
@@ -170,6 +172,31 @@ check(
   getNextRuleChange({ schedules: [{ ...DEFAULT_STATE.schedules[0], enabled: false }] }, at("10:00")),
   null
 );
+
+const catState = {
+  blockedSites: ["bbc.com", "reddit.com", "twitch.tv", "zalando.de"],
+  categories: [
+    { id: "news", name: "News" },
+    { id: "social", name: "Social networks" },
+  ],
+  siteCategories: { "bbc.com": "news", "reddit.com": "social", "twitch.tv": "removed-category" },
+};
+check("site category is looked up by its normalized name", getSiteCategoryId(catState, "www.Reddit.com"), "social");
+check("a site whose category was removed has none", getSiteCategoryId(catState, "twitch.tv"), null);
+check("a site with no entry has none", getSiteCategoryId(catState, "zalando.de"), null);
+check("sites in a category", getSitesInCategory(catState, "news"), ["bbc.com"]);
+check("null lists the uncategorized sites", getSitesInCategory(catState, null), ["twitch.tv", "zalando.de"]);
+check("default categories", DEFAULT_STATE.categories.map((c) => c.name), [
+  "News",
+  "Gambling",
+  "Social networks",
+  "Entertainment",
+  "Shopping",
+]);
+check("state saved before categories existed lists every site as uncategorized", getSitesInCategory(
+  { ...DEFAULT_STATE, blockedSites: ["bbc.com"] },
+  null
+), ["bbc.com"]);
 
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed.`);

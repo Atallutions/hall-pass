@@ -17,49 +17,91 @@
     </span>
   </header>
 
-  <section class="card how-it-works">
-    <div class="card-title">
-      <h2>How it works</h2>
-    </div>
-    <ol class="steps">
-      <li>
-        <strong>Add the sites that distract you.</strong>
-        Adding a site also blocks its subdomains, so <code>reddit.com</code> covers <code>www.reddit.com</code>.
-      </li>
-      <li>
-        <strong>The extension blocks them while an enabled schedule is active.</strong>
-        Opening one of them shows the block page instead of the site.
-      </li>
-      <li>
-        <strong>You can take a 5-minute pass.</strong>
-        Use the toolbar popup or the block page. Each site gets 6 passes a day, and the count resets at midnight.
-      </li>
-    </ol>
-    <p class="muted">
-      You can't end a pass early, and removing a site doesn't reset its count.
-      The limits are fixed on purpose.
-    </p>
-  </section>
+  <div class="layout">
+    <nav class="sidebar" aria-label="Settings">
+      <a class="nav-item" href="#welcome" data-tab="welcome"><span class="nav-label">Welcome</span></a>
+      <a class="nav-item" href="#schedules" data-tab="schedules">
+        <span class="nav-label">Schedules</span>
+        <span id="schedules-count" class="nav-count"></span>
+      </a>
+      <p class="nav-heading">
+        <span>Blocked sites</span>
+        <span id="sites-total" class="nav-count"></span>
+      </p>
+      <div id="category-nav" class="category-nav"></div>
+      <button id="add-category-btn" class="nav-item nav-add" type="button">+ New category</button>
+    </nav>
 
-  <section class="card">
-    <div class="card-title">
-      <h2>Blocked sites</h2>
-      <span id="sites-count" class="count"></span>
-    </div>
-    <form id="add-site-form" class="add-row">
-      <input type="text" id="new-site-input" placeholder="example.com" autocomplete="off" />
-      <button id="add-site-btn" class="btn btn-primary" type="submit">Add site</button>
-    </form>
-    <ul id="sites-list" class="site-list"></ul>
-  </section>
+    <main>
+      <section id="panel-welcome" hidden>
+        <div class="card welcome">
+          <h2 class="welcome-title">Welcome to Hall Pass</h2>
+          <p class="lead">
+            Hall Pass blocks the sites you pick while one of your schedules is active.
+            If you need one of them, you can take a 5-minute pass.
+          </p>
+          <ol class="steps">
+            <li>
+              <strong>Add the sites that distract you.</strong>
+              Sort them into categories, or make your own. Every site follows the same schedules,
+              whatever its category. Adding a site also blocks its subdomains, so <code>reddit.com</code>
+              covers <code>www.reddit.com</code>.
+            </li>
+            <li>
+              <strong>The extension blocks them while an enabled schedule is active.</strong>
+              Opening one of them shows the block page instead of the site.
+            </li>
+            <li>
+              <strong>You can take a 5-minute pass.</strong>
+              Use the toolbar popup or the block page. Each site gets 6 passes a day, and the count resets at midnight.
+            </li>
+          </ol>
+          <p class="muted">
+            You can't end a pass early, and removing a site doesn't reset its count.
+            The limits are fixed on purpose.
+          </p>
+        </div>
 
-  <section class="card">
-    <div class="card-title">
-      <h2>Blocking schedule</h2>
-    </div>
-    <div id="schedules-list" class="schedules"></div>
-    <button id="add-schedule-btn" class="btn btn-dashed" type="button">+ Add schedule</button>
-  </section>
+        <div class="summary">
+          <a id="summary-sites-link" class="card summary-card" href="#sites">
+            <span id="summary-sites" class="summary-value"></span>
+            <span id="summary-sites-label" class="muted"></span>
+            <span class="summary-action">Manage blocked sites</span>
+          </a>
+          <a class="card summary-card" href="#schedules">
+            <span id="summary-schedules" class="summary-value"></span>
+            <span id="summary-schedules-label" class="muted"></span>
+            <span class="summary-action">Edit schedules</span>
+          </a>
+        </div>
+      </section>
+
+      <section id="panel-sites" class="card" hidden>
+        <div class="category-header">
+          <h2 id="uncategorized-title">Uncategorized</h2>
+          <input type="text" id="category-name" class="category-name" placeholder="Untitled category" aria-label="Category name" autocomplete="off" />
+          <button id="remove-category-btn" class="btn btn-danger-ghost" type="button">Remove category</button>
+        </div>
+        <p id="uncategorized-note" class="muted">
+          Sites you add from the toolbar popup go here. Use the menu next to a site to move it into a category.
+        </p>
+        <form id="add-site-form" class="add-row">
+          <input type="text" id="new-site-input" placeholder="example.com" autocomplete="off" aria-label="Site to block" />
+          <button id="add-site-btn" class="btn btn-primary" type="submit">Add site</button>
+        </form>
+        <p id="add-site-note" class="add-note" role="status" hidden></p>
+        <ul id="sites-list" class="site-list"></ul>
+      </section>
+
+      <section id="panel-schedules" class="card" hidden>
+        <div class="card-title">
+          <h2>Blocking schedule</h2>
+        </div>
+        <div id="schedules-list" class="schedules"></div>
+        <button id="add-schedule-btn" class="btn btn-dashed" type="button">+ Add schedule</button>
+      </section>
+    </main>
+  </div>
 
   <template id="schedule-template">
     <div class="schedule-card">

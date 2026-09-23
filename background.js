@@ -123,5 +123,9 @@ browser.storage.onChanged.addListener((changes, area) => {
 browser.alarms.onAlarm.addListener(() => syncRules());
 // Registered so Chrome starts the service worker with the browser; the call below does the work.
 browser.runtime.onStartup.addListener(() => syncRules());
+// The settings page opens on its welcome tab while there are no blocked sites.
+browser.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === "install") browser.runtime.openOptionsPage();
+});
 
 syncRules();

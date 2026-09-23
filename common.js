@@ -17,6 +17,16 @@ const DEFAULT_STATE = {
     { id: "default-morning", label: "Work — morning", days: [1, 2, 3, 4, 5], start: "09:00", end: "13:00", enabled: true },
     { id: "default-afternoon", label: "Work — afternoon", days: [1, 2, 3, 4, 5], start: "14:00", end: "18:00", enabled: true },
   ],
+  // { id, name } in display order. Categories only group sites on the settings page; every site
+  // follows the same schedules. Like schedules, only used until first saved.
+  categories: [
+    { id: "news", name: "News" },
+    { id: "gambling", name: "Gambling" },
+    { id: "social", name: "Social networks" },
+    { id: "entertainment", name: "Entertainment" },
+    { id: "shopping", name: "Shopping" },
+  ],
+  siteCategories: {}, // { [normalizedSite]: categoryId }; a site without one is "Uncategorized"
   unlocks: {}, // { [normalizedSite]: expiryEpochMs } — one independent unlock timer per site
   unlockUsage: { day: "", counts: {} }, // { day:"YYYY-MM-DD", counts:{ [normalizedSite]: n } } — only today's counts are kept
 };
@@ -52,6 +62,17 @@ function hostMatchesSite(host, site) {
 // Unlocks are keyed by this canonical entry so a subdomain visit unlocks the whole site.
 function findBlockedSiteMatch(blockedSites, host) {
   return (blockedSites || []).find((site) => hostMatchesSite(host, site)) || null;
+}
+
+// The id of the category a site is in, or null if it has none or its category was removed.
+function getSiteCategoryId(state, site) {
+  const id = (state.siteCategories || {})[normalizeHost(site)];
+  return (state.categories || []).some((c) => c.id === id) ? id : null;
+}
+
+// Blocked sites in a category, in list order; null gives the uncategorized ones.
+function getSitesInCategory(state, categoryId) {
+  return (state.blockedSites || []).filter((site) => getSiteCategoryId(state, site) === categoryId);
 }
 
 function parseHM(hm) {
@@ -241,6 +262,8 @@ if (typeof module !== "undefined" && module.exports) {
     normalizeSiteInput,
     hostMatchesSite,
     findBlockedSiteMatch,
+    getSiteCategoryId,
+    getSitesInCategory,
     parseHM,
     formatHM,
     DAY_LABELS,

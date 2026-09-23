@@ -8,7 +8,11 @@ gets 6 passes a day.
 
 1. Click the toolbar icon, then **Manage sites & schedule**, and add the sites
    that distract you. Adding `reddit.com` also blocks its subdomains, such as
-   `www.reddit.com`.
+   `www.reddit.com`. Each category (News, Gambling, Social networks,
+   Entertainment and Shopping to start with) has its own tab. You can rename
+   them, remove them or add your own. Categories only sort the list, and every
+   site follows the same schedules. Sites you add from the popup go under
+   Uncategorized.
 2. It comes with two weekday schedules, 09:00 to 13:00 and 14:00 to 18:00, with
    lunch left open. You can edit them, remove them, or add your own. A schedule
    can run past midnight, for example 22:00 to 06:00.
