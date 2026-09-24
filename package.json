@@ -1,0 +1,15 @@
+{
+  "name": "hall-pass",
+  "private": true,
+  "description": "Build and packaging scripts for the Hall Pass extension. The version lives in manifest.json.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node test/common.test.js",
+    "build": "node scripts/build.mjs",
+    "lint": "npm run build && web-ext lint --source-dir dist/firefox",
+    "start:firefox": "web-ext run --source-dir ."
+  },
+  "devDependencies": {
+    "web-ext": "^10.7.0"
+  }
+}

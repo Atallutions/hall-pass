@@ -63,10 +63,17 @@ background script and every page load it. The pages also share `common.css`.
 ## Development
 
 ```sh
-node test/common.test.js          # unit tests, no browser needed
-npx web-ext lint --source-dir .   # lint the extension
-npx web-ext run --source-dir .    # run in a throwaway Firefox profile that reloads on save
+npm install              # installs web-ext, the only dev dependency
+npm test                 # unit tests, no browser needed
+npm run build            # store zips for Chrome and Firefox in web-ext-artifacts/
+npm run lint             # build, then lint the Firefox package
+npm run start:firefox    # run in a throwaway Firefox profile that reloads on save
 ```
+
+There's no transpiling or bundling. The build copies the extension files to
+`dist/chrome/` and `dist/firefox/` and removes the other browser's manifest keys
+from each copy. You can load either folder unpacked to test exactly what gets
+uploaded. For publishing, see [PUBLISHING.md](PUBLISHING.md).
 
 ## Limitations
 
@@ -78,3 +85,7 @@ npx web-ext run --source-dir .    # run in a throwaway Firefox profile that relo
   extension settings, the popup says sites aren't being blocked and offers a
   button to restore access.
 - It isn't published on addons.mozilla.org or the Chrome Web Store.
+
+## License
+
+[MIT](LICENSE)

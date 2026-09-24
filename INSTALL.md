@@ -100,9 +100,12 @@ installs permanently in regular Firefox.
 
 To update later: bump the version, sign again, and install the new `.xpi` the same
 way. It replaces the old version and keeps your data, because the add-on ID
-(`focus-blocker@local.dev`) stays the same. The ID keeps the old Focus Blocker
-name on purpose: changing it would make Firefox treat Hall Pass as a different
-add-on, without your data.
+(`hall-pass@atallutions.com`) stays the same.
+
+Earlier builds used the ID `focus-blocker@local.dev`. Firefox treats those
+as a different add-on, so moving to a newer build doesn't carry over your sites,
+schedules or unlock counts. Note them down, remove the old add-on, then install the
+new one and add them again.
 
 Don't commit your API key or secret. Keep them in environment variables or a
 password manager.

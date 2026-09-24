@@ -5,7 +5,7 @@
   "description": "Blocks distracting sites during work hours or focus sessions. Each site gets six 5-minute passes a day.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "focus-blocker@local.dev",
+      "id": "hall-pass@atallutions.com",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
