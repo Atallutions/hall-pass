@@ -82,7 +82,7 @@ Write it once and reuse it in both stores.
 ## 6. Submit to Firefox
 
 - [ ] At <https://addons.mozilla.org/developers/addon/submit/>, choose **On this site**.
-- [ ] Upload `web-ext-artifacts/hall-pass-firefox-1.1.0.zip`.
+- [ ] Upload `web-ext-artifacts/hall-pass-firefox-0.1.0.zip`.
 - [ ] Compatibility: **Firefox** only. Leave Android unchecked, because it hasn't
       been tested there.
 - [ ] Source code: answer **No**. Nothing is minified or bundled.
@@ -95,7 +95,7 @@ Review usually takes hours to a few days.
 ## 7. Submit to Chrome
 
 - [ ] In the developer dashboard, click **New item** and upload
-      `web-ext-artifacts/hall-pass-chrome-1.1.0.zip`.
+      `web-ext-artifacts/hall-pass-chrome-0.1.0.zip`.
 - [ ] **Store listing**: fill it in from steps 4–5.
 - [ ] **Privacy practices**:
   - [ ] Enter the single purpose.
@@ -111,4 +111,4 @@ Review usually takes hours to a few days.
 
 - [ ] Replace "It isn't published on addons.mozilla.org or the Chrome Web Store" in
       the README with links to both listings, and update the Install section.
-- [ ] Tag the release: `git tag v1.1.0 && git push --tags`.
+- [ ] Tag the release: `git tag v0.1.0 && git push --tags`.

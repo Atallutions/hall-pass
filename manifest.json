@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Hall Pass",
-  "version": "1.1.0",
+  "version": "0.1.0",
   "description": "Blocks distracting sites during work hours or focus sessions. Each site gets six 5-minute passes a day.",
   "browser_specific_settings": {
     "gecko": {
