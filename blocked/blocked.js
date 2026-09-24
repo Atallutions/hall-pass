@@ -1,4 +1,4 @@
-/* global browser, formatHM, getFocusEndDate, getActiveSchedules, getCurrentSessionPhase, getUnlocksRemainingToday, renderAllowance */
+/* global browser, formatHM, getFocusEndDate, getActiveSchedules, getCurrentSessionPhase, getNextRuleChange, getUnlocksRemainingToday, renderAllowance */
 "use strict";
 
 const params = new URLSearchParams(location.search);
@@ -17,6 +17,7 @@ function originalUrl() {
 }
 
 const icon = document.getElementById("icon");
+const shackle = document.getElementById("shackle");
 const eyebrow = document.getElementById("eyebrow");
 const headlineSuffix = document.getElementById("headline-suffix");
 const scheduleLabel = document.getElementById("schedule-label");
@@ -32,7 +33,12 @@ document.title = `${site} is blocked`;
 document.getElementById("site-name").textContent = site;
 continueBtn.textContent = `Continue to ${site}`;
 
+const LOCKED_SHACKLE = shackle.getAttribute("d");
+const OPEN_SHACKLE = "M8 11V7a4 4 0 0 1 7.75-1.4";
+const UNLOCK_LABEL = unlockBtn.textContent;
+
 let reopenAt = null;
+let nextChange = null;
 
 function formatTimeLeft(ms) {
   const totalMinutes = Math.ceil(ms / 60000);
@@ -45,38 +51,30 @@ function formatTimeLeft(ms) {
 
 function renderPasses(remaining) {
   renderAllowance(remaining, "Resets at midnight");
-  if (remaining === 0) {
-    unlockBtn.disabled = true;
-    unlockBtn.textContent = "No passes left today";
-  }
-}
-
-function renderEnded(onBreak) {
-  reopenAt = null;
-  icon.classList.add("ended");
-  document.getElementById("shackle").setAttribute("d", "M8 11V7a4 4 0 0 1 7.75-1.4");
-  eyebrow.textContent = onBreak ? "Break time" : "Focus time is over";
-  headlineSuffix.textContent = "is available again";
-  scheduleLabel.hidden = true;
-  reopen.hidden = true;
-  allowance.hidden = true;
-  unlockBtn.hidden = true;
-  closeBtn.hidden = true;
-  continueBtn.hidden = !from;
+  unlockBtn.disabled = remaining === 0;
+  unlockBtn.textContent = remaining === 0 ? "No passes left today" : UNLOCK_LABEL;
 }
 
 async function render() {
   const status = await browser.runtime.sendMessage({ type: "getStatus" });
   const now = new Date(status.now);
   const phase = getCurrentSessionPhase(status.state, now);
-  if (!status.blockingActive) {
-    renderEnded(Boolean(phase));
-    return;
-  }
+  const ended = !status.blockingActive;
+  nextChange = getNextRuleChange(status.state, now);
 
-  const labels = phase
-    ? [`Session ${phase.round}`]
-    : getActiveSchedules(status.state.schedules, now).map((s) => s.label).filter(Boolean);
+  icon.classList.toggle("ended", ended);
+  shackle.setAttribute("d", ended ? OPEN_SHACKLE : LOCKED_SHACKLE);
+  eyebrow.textContent = !ended ? "Focus time" : phase ? "Break time" : "Focus time is over";
+  headlineSuffix.textContent = ended ? "is available again" : "is blocked";
+  closeBtn.hidden = ended;
+  unlockBtn.hidden = ended;
+  continueBtn.hidden = !ended || !from;
+
+  const labels = ended
+    ? []
+    : phase
+      ? [`Session ${phase.round}`]
+      : getActiveSchedules(status.state.schedules, now).map((s) => s.label).filter(Boolean);
   scheduleLabel.hidden = labels.length === 0;
   scheduleLabel.textContent = labels.join(" · ");
 
@@ -87,18 +85,22 @@ async function render() {
     reopenIn.textContent = formatTimeLeft(reopenAt - now);
   }
 
-  renderPasses(getUnlocksRemainingToday(status.state, site, now));
+  if (ended) allowance.hidden = true;
+  else renderPasses(getUnlocksRemainingToday(status.state, site, now));
 }
 
 setInterval(() => {
-  if (!reopenAt) return;
-  const left = reopenAt - Date.now();
-  if (left <= 0) {
-    render(); // another schedule may start right away, so ask rather than assume it's over
-  } else {
-    reopenIn.textContent = formatTimeLeft(left);
+  if (nextChange && Date.now() >= nextChange) {
+    nextChange = null;
+    render();
+  } else if (reopenAt) {
+    reopenIn.textContent = formatTimeLeft(reopenAt - Date.now());
   }
 }, 15 * 1000);
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.mode || changes.session || changes.schedules)) render();
+});
 
 closeBtn.addEventListener("click", async () => {
   const tab = await browser.tabs.getCurrent();

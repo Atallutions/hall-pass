@@ -123,6 +123,18 @@ function getActiveSchedules(schedules, now) {
 }
 
 function getBlockUntilDate(schedules, now) {
+  const horizon = now.getTime() + 7 * 24 * 60 * 60 * 1000;
+  let until = getLatestActiveEnd(schedules, now);
+  while (until) {
+    const next = getLatestActiveEnd(schedules, until);
+    if (!next) return until;
+    if (next.getTime() > horizon) return null;
+    until = next;
+  }
+  return null;
+}
+
+function getLatestActiveEnd(schedules, now) {
   let latest = null;
   for (const schedule of getActiveSchedules(schedules, now)) {
     const end = parseHM(schedule.end);

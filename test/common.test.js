@@ -95,6 +95,37 @@ check(
   at("06:00", 1).getDate()
 );
 
+const everyDay = [0, 1, 2, 3, 4, 5, 6];
+const endOf = (schedules, now) => {
+  const date = getBlockUntilDate(schedules, now);
+  return date && date.getTime();
+};
+check(
+  "getBlockUntilDate runs through back-to-back schedules",
+  endOf([{ ...weekdayWork, end: "13:00" }, { ...weekdayWork, start: "13:00" }], at("10:00")),
+  at("17:00").getTime()
+);
+check(
+  "getBlockUntilDate runs through overlapping schedules",
+  endOf([{ ...weekdayWork, end: "13:00" }, { ...weekdayWork, start: "12:00", end: "15:00" }], at("10:00")),
+  at("15:00").getTime()
+);
+check(
+  "getBlockUntilDate stops at a one-minute gap",
+  endOf([{ ...weekdayWork, end: "13:00" }, { ...weekdayWork, start: "13:01" }], at("10:00")),
+  at("13:00").getTime()
+);
+check(
+  "getBlockUntilDate follows an overnight window into the morning",
+  endOf([{ ...overnight, days: everyDay }, { days: everyDay, start: "06:00", end: "08:00" }], at("23:00")),
+  at("08:00", 1).getTime()
+);
+check(
+  "getBlockUntilDate has no end when blocking never stops",
+  endOf([{ days: everyDay, start: "00:00", end: "12:00" }, { days: everyDay, start: "12:00", end: "00:00" }], at("10:00")),
+  null
+);
+
 const now = new Date();
 const unlockedState = { unlocks: { "facebook.com": now.getTime() + 1000 } };
 check("isSiteUnlocked true within window", isSiteUnlocked(unlockedState, "facebook.com", now), true);

@@ -1,4 +1,4 @@
-/* global browser, normalizeSiteInput, formatHM, getFocusEndDate, getCurrentSessionPhase, findBlockedSiteMatch, isSiteUnlocked, getUnlockExpiry, getUnlocksRemainingToday, onButtonClick, renderAllowance */
+/* global browser, normalizeSiteInput, formatHM, getFocusEndDate, getCurrentSessionPhase, findBlockedSiteMatch, isSiteUnlocked, getUnlockExpiry, getUnlocksRemainingToday, getNextRuleChange, onButtonClick, renderAllowance */
 "use strict";
 
 const statusBadge = document.getElementById("status-badge");
@@ -28,6 +28,7 @@ let currentMatchedSite = null;
 let currentHostname = null;
 let currentPhaseEnd = 0;
 let currentUnlockEnd = 0;
+let nextChange = null;
 
 function currentTabHostname() {
   return browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
@@ -54,8 +55,8 @@ function formatCountdown(ms) {
 
 setInterval(() => {
   const now = Date.now();
-  if ((currentPhaseEnd && now >= currentPhaseEnd) || (currentUnlockEnd && now >= currentUnlockEnd)) {
-    currentPhaseEnd = currentUnlockEnd = 0;
+  if (nextChange && now >= nextChange) {
+    nextChange = null;
     refresh();
     return;
   }
@@ -105,6 +106,7 @@ function render(status, hostname) {
   currentMatchedSite = hostname ? findBlockedSiteMatch(state.blockedSites, hostname) : null;
   currentHostname = hostname;
   currentUnlockEnd = 0;
+  nextChange = getNextRuleChange(state, now);
   accessWarning.hidden = status.hostAccess !== false;
 
   renderSession(state, now);
