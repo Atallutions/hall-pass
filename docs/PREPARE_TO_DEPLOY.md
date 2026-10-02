@@ -12,8 +12,7 @@ license is MIT.
 
 ```sh
 npm install
-npm test && npm run lint
-npm run build
+npm run release
 ```
 
 Load `dist/chrome/` in `chrome://extensions` (**Load unpacked**) and `dist/firefox/`

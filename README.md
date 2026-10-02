@@ -67,6 +67,7 @@ npm install              # installs web-ext, the only dev dependency
 npm test                 # unit tests, no browser needed
 npm run build            # store zips for Chrome and Firefox in web-ext-artifacts/
 npm run lint             # build, then lint the Firefox package
+npm run release          # from a clean commit: test, build and lint for the stores
 npm run start:firefox    # run in a throwaway Firefox profile that reloads on save
 ```
 

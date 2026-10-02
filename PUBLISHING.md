@@ -3,12 +3,14 @@
 ## Every release
 
 1. Bump `"version"` in `manifest.json`. Neither store accepts a version it has
-   already seen.
-2. `npm test && npm run lint`
-3. `npm run build`. This writes `web-ext-artifacts/hall-pass-chrome-<version>.zip`
-   and `web-ext-artifacts/hall-pass-firefox-<version>.zip`.
-4. Load `dist/chrome/` and `dist/firefox/` unpacked, and check them in each browser.
-5. Upload each zip to its store (see below).
+   already seen. Commit it.
+2. `npm run release`. It stops if there are uncommitted changes or the version is
+   already tagged. Then it runs the tests, writes
+   `web-ext-artifacts/hall-pass-chrome-<version>.zip` and
+   `web-ext-artifacts/hall-pass-firefox-<version>.zip`, and lints the Firefox build.
+3. Load `dist/chrome/` and `dist/firefox/` unpacked, and check them in each browser.
+4. Upload each zip to its store (see below).
+5. Once approved, tag it: `git tag v<version> && git push --tags`.
 
 The code isn't minified or bundled, so Mozilla doesn't need a separate source
 upload.
